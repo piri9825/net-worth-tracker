@@ -174,3 +174,4 @@ cython_debug/
 .pypirc
 
 # Additional files to ignore
+net_worth_tracker.db

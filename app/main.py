@@ -1,5 +1,19 @@
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from app.database import init_db, SessionLocal
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup: Initialize database
+    init_db()
+    print("Database initialized")
+    
+    yield
+    
+    # Shutdown: Clean up resources
+    print("Shutting down application")
+    SessionLocal.close_all()
 
 app = FastAPI(
     title="Net Worth Tracker API",
@@ -8,6 +22,7 @@ app = FastAPI(
     openapi_url="/api/openapi.json",
     docs_url="/api/docs",
     redoc_url="/api/redoc",
+    lifespan=lifespan
 )
 
 # Configure CORS
