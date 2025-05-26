@@ -4,7 +4,10 @@ version = "0.1.0"
 description = "Net Worth Tracker"
 readme = "README.md"
 requires-python = ">=3.13"
-dependencies = []
+dependencies = [
+    "fastapi>=0.115.12",
+    "sqlalchemy>=2.0.41",
+]
 
 [dependency-groups]
 dev = [

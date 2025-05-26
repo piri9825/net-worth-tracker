@@ -173,4 +173,4 @@ cython_debug/
 # PyPI configuration file
 .pypirc
 
-## Additional files to ignore
+# Additional files to ignore
