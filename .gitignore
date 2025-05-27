@@ -175,3 +175,4 @@ cython_debug/
 
 # Additional files to ignore
 net_worth_tracker.db
+accounts.csv

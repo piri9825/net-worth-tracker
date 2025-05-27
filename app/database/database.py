@@ -37,6 +37,6 @@ def init_db():
     """
     from app.models.account import Account
 
-    print("Creating database tables...")  
+    print("Creating database tables...")
     Base.metadata.create_all(bind=engine)
     print("Database tables created")
