@@ -35,7 +35,6 @@ def init_db():
     Initialize the database by creating all tables.
     Call this function during application startup.
     """
-    from app.models.account import Account
 
     print("Creating database tables...")
     Base.metadata.create_all(bind=engine)

@@ -1,6 +1,5 @@
 from typing import List, Optional
 from pydantic import BaseModel, Field
-import uuid
 
 
 class AccountBase(BaseModel):
