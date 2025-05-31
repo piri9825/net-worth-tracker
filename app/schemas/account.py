@@ -14,7 +14,5 @@ class AccountCreate(AccountBase):
 
 
 class Account(AccountBase):
-    id: str
-
     class Config:
         from_attributes = True

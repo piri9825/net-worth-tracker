@@ -9,7 +9,7 @@ class Account(Base):
     id = Column(
         String(36), primary_key=True, index=True, default=lambda: str(uuid.uuid4())
     )
-    name = Column(String(100), nullable=False, index=True)
+    name = Column(String(100), nullable=False, index=True, unique=True)
     description = Column(Text, nullable=True)
     tags = Column(JSON, default=list)
 

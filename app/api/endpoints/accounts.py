@@ -15,6 +15,11 @@ def create_account(account: AccountCreate, db: Session = Depends(get_db)):
     """
     Create a new account
     """
+    # Check if account with this name already exists
+    existing_account = db.query(AccountModel).filter(AccountModel.name == account.name).first()
+    if existing_account:
+        raise HTTPException(status_code=400, detail="Account with this name already exists")
+        
     db_account = AccountModel(**account.model_dump())
     db.add(db_account)
     db.commit()
@@ -31,23 +36,23 @@ def list_accounts(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)
     return accounts
 
 
-@router.get("/{account_id}", response_model=Account)
-def get_account(account_id: str, db: Session = Depends(get_db)):
+@router.get("/{account_name}", response_model=Account)
+def get_account(account_name: str, db: Session = Depends(get_db)):
     """
-    Get a specific account by ID
+    Get a specific account by name
     """
-    db_account = db.query(AccountModel).filter(AccountModel.id == account_id).first()
+    db_account = db.query(AccountModel).filter(AccountModel.name == account_name).first()
     if db_account is None:
         raise HTTPException(status_code=404, detail="Account not found")
     return db_account
 
 
-@router.delete("/{account_id}", response_model=dict)
-def delete_account(account_id: str, db: Session = Depends(get_db)):
+@router.delete("/{account_name}", response_model=dict)
+def delete_account(account_name: str, db: Session = Depends(get_db)):
     """
-    Delete an account by ID
+    Delete an account by name
     """
-    db_account = db.query(AccountModel).filter(AccountModel.id == account_id).first()
+    db_account = db.query(AccountModel).filter(AccountModel.name == account_name).first()
     if db_account is None:
         raise HTTPException(status_code=404, detail="Account not found")
 
