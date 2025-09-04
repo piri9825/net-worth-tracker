@@ -63,6 +63,7 @@ def load_from_excel(
 ):
     """
     Read the Net Worth Tracker Excel file and load accounts and values directly into the database via API
+    Multiple rows for the same account will have their values added together.
     """
     # API endpoints
     accounts_endpoint = f"{api_base_url}/accounts/"
@@ -84,15 +85,12 @@ def load_from_excel(
     # Find data rows (starting from row 3, excluding summary rows)
     account_start_row = 3
 
-    # Track created accounts to avoid duplicates
-    created_accounts = set()
-    accounts_created = 0
-    values_created = 0
-
     print(f"Found {len(dates)} date columns")
     print(f"Processing rows starting from row {account_start_row + 1}")
 
-    # Process each row until we hit summary rfows (which have NaN in column 0)
+    # First pass: collect all account data and aggregate values
+    account_data_map = {}  # account_name -> {tags, where_to_find_list, values_by_date}
+    
     for row_idx in range(account_start_row, len(df)):
         where_to_find = df.iloc[row_idx, 0]  # Column 0: Where to Find
         manual_tags = df.iloc[row_idx, 1]  # Column 1: Tags (e.g., "Short Term, Asset")
@@ -112,37 +110,25 @@ def load_from_excel(
 
         where_to_find = str(where_to_find).strip()
         account_name = str(account_name).strip()
-
-        # Get tags from manual tags column
         tags = parse_manual_tags(manual_tags)
 
-        # Create account if not already created
-        if account_name not in created_accounts:
-            account_data = {
-                "name": account_name,
-                "description": where_to_find,
-                "tags": tags,
+        # Initialize account data if not seen before
+        if account_name not in account_data_map:
+            account_data_map[account_name] = {
+                'tags': tags,
+                'where_to_find_list': [where_to_find],
+                'values_by_date': {}
             }
+        else:
+            # Verify tags are identical for the same account
+            existing_tags = account_data_map[account_name]['tags']
+            if existing_tags != tags:
+                raise ValueError(f"Account '{account_name}' has inconsistent tags: {existing_tags} vs {tags}")
+            
+            # Add where_to_find to the list
+            account_data_map[account_name]['where_to_find_list'].append(where_to_find)
 
-            try:
-                response = requests.post(accounts_endpoint, json=account_data)
-                if response.status_code == 200:
-                    print(f"✓ Created account: {account_name}")
-                    created_accounts.add(account_name)
-                    accounts_created += 1
-                else:
-                    print(
-                        f"⚠ Account creation failed for {account_name}: {response.status_code}"
-                    )
-                    if response.status_code == 400:
-                        # Account might already exist
-                        created_accounts.add(account_name)
-                        print(f"  (Account {account_name} may already exist)")
-            except requests.exceptions.RequestException as e:
-                print(f"✗ Error creating account {account_name}: {e}")
-                continue
-
-        # Process values for this account across all dates
+        # Process values for this row across all dates
         for col_idx, date in enumerate(dates):
             # Get the value from the data (column 3 onwards, after Where to Find, Tags, Account)
             value = df.iloc[row_idx, col_idx + 3]
@@ -163,10 +149,48 @@ def load_from_excel(
             else:
                 continue
 
-            # Create value entry
+            # Add to existing amount for this date, or initialize if first occurrence
+            if date_str not in account_data_map[account_name]['values_by_date']:
+                account_data_map[account_name]['values_by_date'][date_str] = 0
+            
+            account_data_map[account_name]['values_by_date'][date_str] += amount
+
+    # Second pass: create accounts and values using aggregated data
+    accounts_created = 0
+    values_created = 0
+
+    for account_name, account_info in account_data_map.items():
+        # Combine where_to_find descriptions with comma separation
+        combined_description = ", ".join(account_info['where_to_find_list'])
+        
+        # Create account
+        account_data = {
+            "name": account_name,
+            "description": combined_description,
+            "tags": account_info['tags'],
+        }
+
+        try:
+            response = requests.post(accounts_endpoint, json=account_data)
+            if response.status_code == 200:
+                print(f"✓ Created account: {account_name}")
+                accounts_created += 1
+            else:
+                print(
+                    f"⚠ Account creation failed for {account_name}: {response.status_code}"
+                )
+                if response.status_code == 400:
+                    # Account might already exist
+                    print(f"  (Account {account_name} may already exist)")
+        except requests.exceptions.RequestException as e:
+            print(f"✗ Error creating account {account_name}: {e}")
+            continue
+
+        # Create values for this account
+        for date_str, total_amount in account_info['values_by_date'].items():
             value_data = {
                 "account_name": account_name,
-                "amount": amount,
+                "amount": total_amount,
                 "date": date_str,
             }
 
@@ -186,7 +210,7 @@ def load_from_excel(
     print("\n📊 Summary:")
     print(f"✓ Accounts created: {accounts_created}")
     print(f"✓ Values created: {values_created}")
-    print(f"✓ Total accounts processed: {len(created_accounts)}")
+    print(f"✓ Total accounts processed: {len(account_data_map)}")
 
     return accounts_created, values_created
 

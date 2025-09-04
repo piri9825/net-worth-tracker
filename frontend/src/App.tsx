@@ -276,7 +276,7 @@ function App() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-100">
+    <div className="min-h-screen bg-blue-50">
       <div className="container mx-auto px-4 py-4">
         {/* Header */}
         <div className="mb-6">
