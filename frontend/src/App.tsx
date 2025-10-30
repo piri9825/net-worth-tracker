@@ -26,77 +26,51 @@ ChartJS.register(
 );
 
 // Types
-interface Account {
-  name: string;
-  description?: string;
-  tags: string[];
-}
-
-interface Value {
-  id: string;
-  account_name: string;
-  amount: number;
-  date: string;
-}
-
-type ViewMode = 'aggregated' | 'split';
+import type { Account, Value, ViewMode, Term, AccountType } from './types/api';
 
 function App() {
   const [accounts, setAccounts] = useState<Account[]>([]);
-  const [allTags, setAllTags] = useState<string[]>([]);
-  const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [selectedTerm, setSelectedTerm] = useState<Term[]>([]);
+  const [selectedType, setSelectedType] = useState<AccountType[]>([]);
   const [selectedAccounts, setSelectedAccounts] = useState<string[]>([]);
   const [viewMode, setViewMode] = useState<ViewMode>('aggregated');
   const [chartData, setChartData] = useState<any>(null);
   const [loading, setLoading] = useState(false);
 
-  // Fetch accounts and tags on mount
+  // Fetch accounts on mount
   useEffect(() => {
-    const fetchAccountsAndTags = async () => {
+    const fetchAccounts = async () => {
       try {
         const response = await axios.get<Account[]>('http://localhost:8000/api/accounts/');
-        const accountsData = response.data;
-        setAccounts(accountsData);
-        
-        // Extract unique tags
-        const tags = [...new Set(accountsData.flatMap(acc => acc.tags))].sort();
-        setAllTags(tags);
+        setAccounts(response.data);
       } catch (error) {
         console.error('Error fetching accounts:', error);
       }
     };
-    
-    fetchAccountsAndTags();
+
+    fetchAccounts();
   }, []);
 
-  // Filter accounts by selected tags - OR within groups, AND across groups
-  const filteredAccounts = selectedTags.length === 0 
-    ? accounts 
-    : accounts.filter(account => {
-        // Group the selected tags
-        const typeFilters = selectedTags.filter(tag => ['Asset', 'Liability'].includes(tag));
-        const timeFilters = selectedTags.filter(tag => ['Short Term', 'Long Term'].includes(tag));
+  // Filter accounts by selected term and type
+  const filteredAccounts = accounts.filter(account => {
+    const termMatch = selectedTerm.length === 0 || selectedTerm.includes(account.term ?? null);
+    const typeMatch = selectedType.length === 0 || selectedType.includes(account.type ?? null);
+    return termMatch && typeMatch;
+  });
 
-        // Check each group (AND across groups, OR within groups)
-        const typeMatch = typeFilters.length === 0 || typeFilters.some(tag => account.tags.includes(tag));
-        const timeMatch = timeFilters.length === 0 || timeFilters.some(tag => account.tags.includes(tag));
-
-        return typeMatch && timeMatch;
-      });
-
-  // Update selected accounts when tags change - keep only accounts that match the current filter
+  // Update selected accounts when filters change - keep only accounts that match the current filter
   useEffect(() => {
-    if (selectedTags.length > 0) {
+    if (selectedTerm.length > 0 || selectedType.length > 0) {
       const validAccountNames = filteredAccounts.map(acc => acc.name);
       const updatedSelectedAccounts = selectedAccounts.filter(accountName =>
         validAccountNames.includes(accountName)
       );
-      
+
       if (updatedSelectedAccounts.length !== selectedAccounts.length) {
         setSelectedAccounts(updatedSelectedAccounts);
       }
     }
-  }, [selectedTags, filteredAccounts]);
+  }, [selectedTerm, selectedType, filteredAccounts]);
 
   // Update chart when selections change
   useEffect(() => {
@@ -259,11 +233,19 @@ function App() {
     },
   };
 
-  const handleTagToggle = (tag: string) => {
-    if (selectedTags.includes(tag)) {
-      setSelectedTags(selectedTags.filter(t => t !== tag));
+  const handleTermToggle = (term: Term) => {
+    if (selectedTerm.includes(term)) {
+      setSelectedTerm(selectedTerm.filter(t => t !== term));
     } else {
-      setSelectedTags([...selectedTags, tag]);
+      setSelectedTerm([...selectedTerm, term]);
+    }
+  };
+
+  const handleTypeToggle = (type: AccountType) => {
+    if (selectedType.includes(type)) {
+      setSelectedType(selectedType.filter(t => t !== type));
+    } else {
+      setSelectedType([...selectedType, type]);
     }
   };
 
@@ -290,48 +272,54 @@ function App() {
 
         {/* Controls Row */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-          {/* Tag Filter - Compact */}
+          {/* Filter - Compact */}
           <div className="bg-white p-6 rounded-lg shadow-md">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-medium text-gray-900">Filter by Tags</h3>
+              <h3 className="text-lg font-medium text-gray-900">Filters</h3>
               <div className="flex space-x-2">
                 <button
-                  onClick={() => setSelectedTags(allTags)}
+                  onClick={() => {
+                    setSelectedTerm(['Short Term', 'Long Term']);
+                    setSelectedType(['Asset', 'Liability']);
+                  }}
                   className="text-sm text-blue-600 hover:text-blue-800"
                 >
                   All
                 </button>
                 <span className="text-gray-300">|</span>
                 <button
-                  onClick={() => setSelectedTags([])}
+                  onClick={() => {
+                    setSelectedTerm([]);
+                    setSelectedType([]);
+                  }}
                   className="text-sm text-blue-600 hover:text-blue-800"
                 >
                   Clear
                 </button>
               </div>
             </div>
-            
+
             <div className="grid grid-cols-2 gap-6">
               {/* Type */}
               <div>
                 <h4 className="text-sm font-medium text-gray-700 mb-3">Type</h4>
                 <div className="flex justify-center gap-x-6">
-                  {['Asset', 'Liability'].filter(tag => allTags.includes(tag)).map((tag) => (
+                  {(['Asset', 'Liability'] as AccountType[]).map((type) => (
                     <label
-                      key={tag}
+                      key={type}
                       className={`flex items-center space-x-3 p-3 rounded-md border cursor-pointer transition-colors ${
-                        selectedTags.includes(tag)
-                          ? (tag === 'Asset' ? 'bg-green-50 border-green-300 text-green-900' : 'bg-red-50 border-red-300 text-red-900')
+                        selectedType.includes(type)
+                          ? (type === 'Asset' ? 'bg-green-50 border-green-300 text-green-900' : 'bg-red-50 border-red-300 text-red-900')
                           : 'bg-gray-50 border-gray-200 text-gray-700 hover:bg-gray-100'
                       }`}
                     >
                       <input
                         type="checkbox"
-                        checked={selectedTags.includes(tag)}
-                        onChange={() => handleTagToggle(tag)}
+                        checked={selectedType.includes(type)}
+                        onChange={() => handleTypeToggle(type)}
                         className="w-4 h-4"
                       />
-                      <span className="text-sm font-medium">{tag}</span>
+                      <span className="text-sm font-medium">{type}</span>
                     </label>
                   ))}
                 </div>
@@ -339,24 +327,24 @@ function App() {
 
               {/* Time Horizon */}
               <div>
-                <h4 className="text-sm font-medium text-gray-700 mb-3">Time Horizon</h4>
+                <h4 className="text-sm font-medium text-gray-700 mb-3">Term</h4>
                 <div className="flex justify-center gap-x-6">
-                  {['Short Term', 'Long Term'].filter(tag => allTags.includes(tag)).map((tag) => (
+                  {(['Short Term', 'Long Term'] as Term[]).map((term) => (
                     <label
-                      key={tag}
+                      key={term}
                       className={`flex items-center space-x-3 p-3 rounded-md border cursor-pointer transition-colors ${
-                        selectedTags.includes(tag)
-                          ? (tag === 'Short Term' ? 'bg-sky-50 border-sky-300 text-sky-900' : 'bg-purple-50 border-purple-300 text-purple-900')
+                        selectedTerm.includes(term)
+                          ? (term === 'Short Term' ? 'bg-sky-50 border-sky-300 text-sky-900' : 'bg-purple-50 border-purple-300 text-purple-900')
                           : 'bg-gray-50 border-gray-200 text-gray-700 hover:bg-gray-100'
                       }`}
                     >
                       <input
                         type="checkbox"
-                        checked={selectedTags.includes(tag)}
-                        onChange={() => handleTagToggle(tag)}
+                        checked={selectedTerm.includes(term)}
+                        onChange={() => handleTermToggle(term)}
                         className="w-4 h-4"
                       />
-                      <span className="text-sm font-medium">{tag}</span>
+                      <span className="text-sm font-medium">{term}</span>
                     </label>
                   ))}
                 </div>
@@ -411,20 +399,26 @@ function App() {
                         )}
                       </div>
                       <div className="flex flex-wrap gap-1 mt-1">
-                        {account.tags.map((tag) => (
+                        {account.type && (
                           <span
-                            key={tag}
                             className={`inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium ${
-                              tag === 'Asset' ? 'bg-green-100 text-green-800' :
-                              tag === 'Liability' ? 'bg-red-100 text-red-800' :
-                              tag === 'Short Term' ? 'bg-sky-100 text-sky-800' :
-                              tag === 'Long Term' ? 'bg-purple-100 text-purple-800' :
-                              'bg-gray-100 text-gray-800'
+                              account.type === 'Asset' ? 'bg-green-100 text-green-800' :
+                              'bg-red-100 text-red-800'
                             }`}
                           >
-                            {tag}
+                            {account.type}
                           </span>
-                        ))}
+                        )}
+                        {account.term && (
+                          <span
+                            className={`inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium ${
+                              account.term === 'Short Term' ? 'bg-sky-100 text-sky-800' :
+                              'bg-purple-100 text-purple-800'
+                            }`}
+                          >
+                            {account.term}
+                          </span>
+                        )}
                       </div>
                     </div>
                   </label>

@@ -5,8 +5,9 @@ A full-stack web application for tracking and visualizing account values over ti
 ## Features
 
 - 📊 Interactive charts with Chart.js
-- 🏷️ Tag-based filtering (Asset/Liability, Short Term/Long Term)
+- 🏷️ Structured account classification (Term, Type, Portfolio, Asset Class)
 - 📈 Aggregated and split view modes
+- 🔍 Advanced filtering by account attributes
 - 📱 Responsive design
 - 📁 Direct Excel file import
 
@@ -25,13 +26,27 @@ net-worth-tracker/
 │   ├── api/               # API endpoints
 │   ├── database/          # Database configuration
 │   ├── models/            # SQLAlchemy models
-│   └── schemas/           # Pydantic schemas
+│   ├── schemas/           # Pydantic schemas
+│   └── enums.py           # Account classification enums
 ├── frontend/              # React frontend
 │   └── src/
+│       ├── types/         # TypeScript type definitions
+│       └── components/    # React components
 ├── scripts/               # Data loading scripts
 │   └── load_from_excel.py # Main data import script
 └── Net Worth Tracker.xlsx # Your data file
 ```
+
+## Account Data Model
+
+Each account has the following optional classification fields:
+
+- **Term**: `Short Term` | `Long Term` | null
+- **Type**: `Asset` | `Liability` | null
+- **Portfolio**: `Liquid` | `Illiquid` | null
+- **Asset Class**: `Cash` | `Equities` | `Crypto` | `Real Estate` | null
+
+All fields are nullable - accounts without specific classifications will simply omit those fields.
 
 ## Setup & Installation
 
@@ -52,7 +67,18 @@ npm install
 
 ### 3. Data Preparation
 
-Ensure your `Net Worth Tracker.xlsx` file is in the root directory. Can make your own version of `load_from_excel.py` to load data in via API.
+Prepare your `Net Worth Tracker.xlsx` file in the root directory with the following structure:
+
+**Excel Format (first row is headers):**
+- Column 0: **Description** (used to detect data rows - must not be empty)
+- Column 1: **Term** (Short Term, Long Term, or empty)
+- Column 2: **Type** (Asset, Liability, or empty)
+- Column 3: **Portfolio** (Liquid, Illiquid, or empty)
+- Column 4: **Asset Class** (Cash, Equities, Crypto, Real Estate, or empty)
+- Column 5: **Account** (Account name - required)
+- Column 6+: **Date columns** (dates in first row, values in data rows)
+
+The script stops reading when it encounters a row with an empty Description field (used to separate data from summary rows).
 
 ## Running the Application
 
@@ -75,10 +101,11 @@ uv run python scripts/load_from_excel.py
 
 This script will:
 - Clear any existing accounts and values
-- Read your Excel file directly
-- Create accounts with proper tags
+- Read your Excel file using the header row
+- Create accounts with structured classifications (Term, Type, Portfolio, Asset Class)
+- Aggregate values for accounts that appear in multiple rows
 - Import all historical values
-- Show progress and summary
+- Show progress and summary statistics
 
 ### 3. Start the Frontend Server
 

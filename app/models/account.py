@@ -1,7 +1,8 @@
-from sqlalchemy import Column, String, Text, JSON
+from sqlalchemy import Column, String, Text, Enum as SQLEnum
 import uuid
 from sqlalchemy.orm import relationship
 from app.database import Base
+from app.enums import Term, AccountType, Portfolio, AssetClass
 
 
 class Account(Base):
@@ -12,7 +13,10 @@ class Account(Base):
     )
     name = Column(String(100), nullable=False, index=True, unique=True)
     description = Column(Text, nullable=True)
-    tags = Column(JSON, default=list)
+    term = Column(SQLEnum(Term), nullable=True)
+    type = Column(SQLEnum(AccountType), nullable=True)
+    portfolio = Column(SQLEnum(Portfolio), nullable=True)
+    asset_class = Column(SQLEnum(AssetClass), nullable=True)
 
     # Relationship to values
     values = relationship(
