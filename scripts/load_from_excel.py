@@ -3,21 +3,20 @@ import requests
 from datetime import datetime
 
 
-def parse_manual_tags(tags_cell):
+def parse_enum_value(cell_value):
     """
-    Parse the manual tags from the Excel cell
-    Expected format: comma-separated tags like "Asset, Long Term" or "Liability, Short Term"
+    Parse an enum value from the Excel cell.
+    Returns the value if present, None otherwise.
+    Handles both NaN and the string "None".
     """
-    if pd.isna(tags_cell):
-        return []
+    if pd.isna(cell_value):
+        return None
 
-    # Convert to string and split by comma, then clean up whitespace
-    tags_str = str(tags_cell).strip()
-    if not tags_str:
-        return []
+    value_str = str(cell_value).strip()
+    if not value_str or value_str.lower() == "none":
+        return None
 
-    tags = [tag.strip() for tag in tags_str.split(",") if tag.strip()]
-    return tags
+    return value_str
 
 
 def clear_existing_data(api_base_url):
@@ -75,63 +74,66 @@ def load_from_excel(
     if clear_data:
         clear_existing_data(api_base_url)
 
-    # Read the Net Worth sheet
-    df = pd.read_excel(xlsx_file, sheet_name="Net Worth", header=None)
+    # Read the Net Worth sheet with first row as header
+    df = pd.read_excel(xlsx_file, sheet_name="Net Worth", header=0)
 
-    # Extract dates from row 2 (index 2), starting from column 3 (skip 'Where to Find', 'Tags', and 'Account' columns)
-    date_row_idx = 2
-    dates = df.iloc[date_row_idx, 3:].dropna()
+    # Get all date columns (columns after the first 6 attribute columns)
+    date_columns = [col for col in df.columns[6:] if not pd.isna(col)]
 
-    # Find data rows (starting from row 3, excluding summary rows)
-    account_start_row = 3
-
-    print(f"Found {len(dates)} date columns")
-    print(f"Processing rows starting from row {account_start_row + 1}")
+    print(f"Found {len(date_columns)} date columns")
+    print(f"Columns: {list(df.columns[:6])}")  # Show first 6 attribute columns
 
     # First pass: collect all account data and aggregate values
-    account_data_map = {}  # account_name -> {tags, where_to_find_list, values_by_date}
-    
-    for row_idx in range(account_start_row, len(df)):
-        where_to_find = df.iloc[row_idx, 0]  # Column 0: Where to Find
-        manual_tags = df.iloc[row_idx, 1]  # Column 1: Tags (e.g., "Short Term, Asset")
-        account_name = (
-            df.iloc[row_idx, 2] if len(df.columns) > 2 else None
-        )  # Column 2: Account Name
+    account_data_map = {}  # account_name -> {term, type, portfolio, asset_class, description, values_by_date}
 
-        # Stop when we hit summary rows (where column 0 is NaN)
-        if pd.isna(where_to_find):
-            print(f"Reached summary rows at row {row_idx + 1}, stopping processing")
+    for idx, row in df.iterrows():
+        # Stop when we hit summary rows (where Description column is NaN)
+        description_col = df.columns[0]  # Get the actual column name for Description
+        if pd.isna(row[description_col]):
+            print(f"Reached summary rows at row {idx + 2}, stopping processing")  # +2 because header is row 1
             break
 
-        # Skip if account name is NaN
+        # Extract account attributes using column names
+        term = parse_enum_value(row[df.columns[1]])  # Column 1: Term
+        type_val = parse_enum_value(row[df.columns[2]])  # Column 2: Type
+        portfolio = parse_enum_value(row[df.columns[3]])  # Column 3: Portfolio
+        asset_class = parse_enum_value(row[df.columns[4]])  # Column 4: Asset Class
+        account_name = row[df.columns[5]]  # Column 5: Account
+
+        # Skip if account name is missing
         if pd.isna(account_name):
-            print(f"Skipping row {row_idx + 1} - no account name")
+            print(f"Skipping row {idx + 2} - no account name")
             continue
 
-        where_to_find = str(where_to_find).strip()
         account_name = str(account_name).strip()
-        tags = parse_manual_tags(manual_tags)
+        description = parse_enum_value(row[description_col])
 
         # Initialize account data if not seen before
         if account_name not in account_data_map:
             account_data_map[account_name] = {
-                'tags': tags,
-                'where_to_find_list': [where_to_find],
+                'term': term,
+                'type': type_val,
+                'portfolio': portfolio,
+                'asset_class': asset_class,
+                'description': description,
                 'values_by_date': {}
             }
         else:
-            # Verify tags are identical for the same account
-            existing_tags = account_data_map[account_name]['tags']
-            if existing_tags != tags:
-                raise ValueError(f"Account '{account_name}' has inconsistent tags: {existing_tags} vs {tags}")
-            
-            # Add where_to_find to the list
-            account_data_map[account_name]['where_to_find_list'].append(where_to_find)
+            # Verify attributes are identical for the same account (in case of duplicate rows)
+            existing = account_data_map[account_name]
+            if (existing['term'] != term or existing['type'] != type_val or
+                existing['portfolio'] != portfolio or existing['asset_class'] != asset_class):
+                raise ValueError(
+                    f"Account '{account_name}' has inconsistent attributes across rows. "
+                    f"Existing: term={existing['term']}, type={existing['type']}, "
+                    f"portfolio={existing['portfolio']}, asset_class={existing['asset_class']}. "
+                    f"Row {idx + 2}: term={term}, type={type_val}, "
+                    f"portfolio={portfolio}, asset_class={asset_class}"
+                )
 
-        # Process values for this row across all dates
-        for col_idx, date in enumerate(dates):
-            # Get the value from the data (column 3 onwards, after Where to Find, Tags, Account)
-            value = df.iloc[row_idx, col_idx + 3]
+        # Process values for this row across all date columns
+        for date_col in date_columns:
+            value = row[date_col]
 
             # Skip NaN values
             if pd.isna(value):
@@ -143,16 +145,21 @@ def load_from_excel(
             except (ValueError, TypeError):
                 continue
 
-            # Format date properly
-            if isinstance(date, (pd.Timestamp, datetime)):
-                date_str = date.strftime("%Y-%m-%d")
+            # Format date properly - date_col should already be a date from the header
+            if isinstance(date_col, (pd.Timestamp, datetime)):
+                date_str = date_col.strftime("%Y-%m-%d")
             else:
-                continue
+                # Try to parse if it's a string
+                try:
+                    parsed_date = pd.to_datetime(date_col)
+                    date_str = parsed_date.strftime("%Y-%m-%d")
+                except:
+                    continue
 
             # Add to existing amount for this date, or initialize if first occurrence
             if date_str not in account_data_map[account_name]['values_by_date']:
                 account_data_map[account_name]['values_by_date'][date_str] = 0
-            
+
             account_data_map[account_name]['values_by_date'][date_str] += amount
 
     # Second pass: create accounts and values using aggregated data
@@ -160,14 +167,14 @@ def load_from_excel(
     values_created = 0
 
     for account_name, account_info in account_data_map.items():
-        # Combine where_to_find descriptions with comma separation
-        combined_description = ", ".join(account_info['where_to_find_list'])
-        
-        # Create account
+        # Create account with new structure
         account_data = {
             "name": account_name,
-            "description": combined_description,
-            "tags": account_info['tags'],
+            "description": account_info['description'],
+            "term": account_info['term'],
+            "type": account_info['type'],
+            "portfolio": account_info['portfolio'],
+            "asset_class": account_info['asset_class'],
         }
 
         try:
@@ -179,6 +186,7 @@ def load_from_excel(
                 print(
                     f"⚠ Account creation failed for {account_name}: {response.status_code}"
                 )
+                print(f"  Response: {response.text}")
                 if response.status_code == 400:
                     # Account might already exist
                     print(f"  (Account {account_name} may already exist)")
