@@ -50,32 +50,17 @@ export const valuesApi = {
 };
 
 export const dataService = {
-  getAccountsByTags: async (selectedTags: string[]): Promise<Account[]> => {
-    const allAccounts = await accountsApi.getAll();
-    if (selectedTags.length === 0) return allAccounts;
-    
-    return allAccounts.filter(account =>
-      selectedTags.some(tag => account.tags.includes(tag))
-    );
-  },
-  
   getValuesByAccounts: async (
     accounts: Account[],
     dateRange?: { start_date?: string; end_date?: string }
   ): Promise<Value[]> => {
     const allValues: Value[] = [];
-    
+
     for (const account of accounts) {
       const values = await valuesApi.getByAccount(account.name, dateRange);
       allValues.push(...values);
     }
-    
+
     return allValues.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-  },
-  
-  getAllUniqueTags: async (): Promise<string[]> => {
-    const accounts = await accountsApi.getAll();
-    const allTags = accounts.flatMap(account => account.tags);
-    return [...new Set(allTags)].sort();
   },
 };
