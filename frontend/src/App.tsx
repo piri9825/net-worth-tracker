@@ -270,167 +270,153 @@ function App() {
           </p>
         </div>
 
-        {/* Controls Row */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-          {/* Filter - Compact */}
-          <div className="bg-white p-6 rounded-lg shadow-md">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-medium text-gray-900">Filters</h3>
-              <div className="flex space-x-2">
-                <button
-                  onClick={() => {
-                    setSelectedTerm(['Short Term', 'Long Term']);
-                    setSelectedType(['Asset', 'Liability']);
-                  }}
-                  className="text-sm text-blue-600 hover:text-blue-800"
-                >
-                  All
-                </button>
-                <span className="text-gray-300">|</span>
-                <button
-                  onClick={() => {
-                    setSelectedTerm([]);
-                    setSelectedType([]);
-                  }}
-                  className="text-sm text-blue-600 hover:text-blue-800"
-                >
-                  Clear
-                </button>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-6">
-              {/* Type */}
-              <div>
-                <h4 className="text-sm font-medium text-gray-700 mb-3">Type</h4>
-                <div className="flex justify-center gap-x-6">
-                  {(['Asset', 'Liability'] as AccountType[]).map((type) => (
-                    <label
-                      key={type}
-                      className={`flex items-center space-x-3 p-3 rounded-md border cursor-pointer transition-colors ${
-                        selectedType.includes(type)
-                          ? (type === 'Asset' ? 'bg-green-50 border-green-300 text-green-900' : 'bg-red-50 border-red-300 text-red-900')
-                          : 'bg-gray-50 border-gray-200 text-gray-700 hover:bg-gray-100'
-                      }`}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={selectedType.includes(type)}
-                        onChange={() => handleTypeToggle(type)}
-                        className="w-4 h-4"
-                      />
-                      <span className="text-sm font-medium">{type}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-
-              {/* Time Horizon */}
-              <div>
-                <h4 className="text-sm font-medium text-gray-700 mb-3">Term</h4>
-                <div className="flex justify-center gap-x-6">
-                  {(['Short Term', 'Long Term'] as Term[]).map((term) => (
-                    <label
-                      key={term}
-                      className={`flex items-center space-x-3 p-3 rounded-md border cursor-pointer transition-colors ${
-                        selectedTerm.includes(term)
-                          ? (term === 'Short Term' ? 'bg-sky-50 border-sky-300 text-sky-900' : 'bg-purple-50 border-purple-300 text-purple-900')
-                          : 'bg-gray-50 border-gray-200 text-gray-700 hover:bg-gray-100'
-                      }`}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={selectedTerm.includes(term)}
-                        onChange={() => handleTermToggle(term)}
-                        className="w-4 h-4"
-                      />
-                      <span className="text-sm font-medium">{term}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
+        {/* Account Selector with Integrated Filters */}
+        <div className="bg-white p-6 rounded-lg shadow-md mb-6">
+          {/* Header with Actions */}
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-medium text-gray-900">
+              Select Accounts ({filteredAccounts.length} available{selectedAccounts.length > 0 ? `, ${selectedAccounts.length} selected` : ''})
+            </h3>
+            <div className="flex space-x-2">
+              <button
+                onClick={() => setSelectedAccounts(filteredAccounts.map(acc => acc.name))}
+                className="text-sm text-blue-600 hover:text-blue-800"
+              >
+                Select All
+              </button>
+              <span className="text-gray-300">|</span>
+              <button
+                onClick={() => setSelectedAccounts([])}
+                className="text-sm text-blue-600 hover:text-blue-800"
+              >
+                Clear All
+              </button>
             </div>
           </div>
 
-          {/* Account Selector */}
-          <div className="bg-white p-6 rounded-lg shadow-md">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-medium text-gray-900">
-                Select Accounts ({filteredAccounts.length} available)
-              </h3>
-              <div className="flex space-x-2">
-                <button
-                  onClick={() => setSelectedAccounts(filteredAccounts.map(acc => acc.name))}
-                  className="text-sm text-blue-600 hover:text-blue-800"
-                >
-                  Select All
-                </button>
-                <span className="text-gray-300">|</span>
-                <button
-                  onClick={() => setSelectedAccounts([])}
-                  className="text-sm text-blue-600 hover:text-blue-800"
-                >
-                  Clear All
-                </button>
-              </div>
-            </div>
+          {/* Compact Filters */}
+          <div className="flex items-center gap-4 mb-4 pb-4 border-b border-gray-200">
+            <span className="text-sm font-medium text-gray-700">Filter:</span>
 
-            <div className="grid grid-cols-3 gap-3">
-              {filteredAccounts.map((account) => (
-                <div key={account.name} className="relative group">
-                  <label
-                    className={`flex items-center space-x-2 p-3 rounded-lg border cursor-pointer transition-colors ${
-                      selectedAccounts.includes(account.name)
-                        ? 'bg-blue-50 border-blue-300'
-                        : 'bg-gray-50 border-gray-200 hover:bg-gray-100'
-                    }`}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={selectedAccounts.includes(account.name)}
-                      onChange={() => handleAccountToggle(account.name)}
-                      className="w-4 h-4"
-                    />
-                    <div className="flex-1 min-w-0">
-                      <div className="text-sm truncate">
-                        <span className="font-medium text-gray-900">{account.name}</span>
-                        {account.description && (
-                          <span className="text-xs text-gray-500 ml-2">({account.description})</span>
-                        )}
-                      </div>
-                      <div className="flex flex-wrap gap-1 mt-1">
-                        {account.type && (
-                          <span
-                            className={`inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium ${
-                              account.type === 'Asset' ? 'bg-green-100 text-green-800' :
-                              'bg-red-100 text-red-800'
-                            }`}
-                          >
-                            {account.type}
-                          </span>
-                        )}
-                        {account.term && (
-                          <span
-                            className={`inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium ${
-                              account.term === 'Short Term' ? 'bg-sky-100 text-sky-800' :
-                              'bg-purple-100 text-purple-800'
-                            }`}
-                          >
-                            {account.term}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  </label>
-                </div>
+            {/* Type Filters */}
+            <div className="flex items-center gap-2">
+              {(['Asset', 'Liability'] as AccountType[]).map((type) => (
+                <label
+                  key={type}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md border cursor-pointer transition-colors text-sm ${
+                    selectedType.includes(type)
+                      ? (type === 'Asset' ? 'bg-green-50 border-green-300 text-green-900' : 'bg-red-50 border-red-300 text-red-900')
+                      : 'bg-gray-50 border-gray-200 text-gray-700 hover:bg-gray-100'
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={selectedType.includes(type)}
+                    onChange={() => handleTypeToggle(type)}
+                    className="w-3.5 h-3.5"
+                  />
+                  <span className="font-medium">{type}</span>
+                </label>
               ))}
             </div>
 
-            {selectedAccounts.length > 0 && (
-              <div className="mt-4 text-sm text-gray-600">
-                {selectedAccounts.length} account{selectedAccounts.length !== 1 ? 's' : ''} selected
+            <span className="text-gray-300">|</span>
+
+            {/* Term Filters */}
+            <div className="flex items-center gap-2">
+              {(['Short Term', 'Long Term'] as Term[]).map((term) => (
+                <label
+                  key={term}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md border cursor-pointer transition-colors text-sm ${
+                    selectedTerm.includes(term)
+                      ? (term === 'Short Term' ? 'bg-sky-50 border-sky-300 text-sky-900' : 'bg-purple-50 border-purple-300 text-purple-900')
+                      : 'bg-gray-50 border-gray-200 text-gray-700 hover:bg-gray-100'
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={selectedTerm.includes(term)}
+                    onChange={() => handleTermToggle(term)}
+                    className="w-3.5 h-3.5"
+                  />
+                  <span className="font-medium">{term}</span>
+                </label>
+              ))}
+            </div>
+
+            <div className="ml-auto flex space-x-2">
+              <button
+                onClick={() => {
+                  setSelectedTerm(['Short Term', 'Long Term']);
+                  setSelectedType(['Asset', 'Liability']);
+                }}
+                className="text-xs text-blue-600 hover:text-blue-800 font-medium"
+              >
+                All Filters
+              </button>
+              <span className="text-gray-300">|</span>
+              <button
+                onClick={() => {
+                  setSelectedTerm([]);
+                  setSelectedType([]);
+                }}
+                className="text-xs text-blue-600 hover:text-blue-800 font-medium"
+              >
+                Clear Filters
+              </button>
+            </div>
+          </div>
+
+          {/* Account Grid */}
+          <div className="grid grid-cols-3 gap-3">
+            {filteredAccounts.map((account) => (
+              <div key={account.name} className="relative group">
+                <label
+                  className={`flex items-center space-x-2 p-3 rounded-lg border cursor-pointer transition-colors ${
+                    selectedAccounts.includes(account.name)
+                      ? 'bg-blue-50 border-blue-300'
+                      : 'bg-gray-50 border-gray-200 hover:bg-gray-100'
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={selectedAccounts.includes(account.name)}
+                    onChange={() => handleAccountToggle(account.name)}
+                    className="w-4 h-4"
+                  />
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm truncate">
+                      <span className="font-medium text-gray-900">{account.name}</span>
+                      {account.description && (
+                        <span className="text-xs text-gray-500 ml-2">({account.description})</span>
+                      )}
+                    </div>
+                    <div className="flex flex-wrap gap-1 mt-1">
+                      {account.type && (
+                        <span
+                          className={`inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium ${
+                            account.type === 'Asset' ? 'bg-green-100 text-green-800' :
+                            'bg-red-100 text-red-800'
+                          }`}
+                        >
+                          {account.type}
+                        </span>
+                      )}
+                      {account.term && (
+                        <span
+                          className={`inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium ${
+                            account.term === 'Short Term' ? 'bg-sky-100 text-sky-800' :
+                            'bg-purple-100 text-purple-800'
+                          }`}
+                        >
+                          {account.term}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </label>
               </div>
-            )}
+            ))}
           </div>
         </div>
 
