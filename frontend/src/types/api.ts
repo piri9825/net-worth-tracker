@@ -1,6 +1,6 @@
 export type Term = "Short Term" | "Long Term" | null;
 export type AccountType = "Asset" | "Liability" | null;
-export type Portfolio = "Liquid" | "Illiquid" | null;
+export type Portfolio = "Liquid" | "Illiquid" | "Cash Reserves" | null;
 export type AssetClass = "Cash" | "Equities" | "Crypto" | "Real Estate" | null;
 
 export interface Account {

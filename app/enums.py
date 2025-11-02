@@ -14,6 +14,7 @@ class AccountType(str, Enum):
 class Portfolio(str, Enum):
     LIQUID = "Liquid"
     ILLIQUID = "Illiquid"
+    CASH_RESERVES = "Cash Reserves"
 
 
 class AssetClass(str, Enum):
