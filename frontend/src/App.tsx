@@ -299,7 +299,7 @@ function App() {
             <span className="text-sm font-medium text-gray-700">Filter:</span>
 
             {/* Type Filters */}
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-3">
               {(['Asset', 'Liability'] as AccountType[]).map((type) => (
                 <label
                   key={type}
@@ -323,7 +323,7 @@ function App() {
             <span className="text-gray-300">|</span>
 
             {/* Term Filters */}
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-3">
               {(['Short Term', 'Long Term'] as Term[]).map((term) => (
                 <label
                   key={term}
