@@ -204,7 +204,17 @@ function PortfolioBreakdown() {
               style: 'currency',
               currency: 'GBP',
             }).format(value);
-            return `${context.dataset.label}: ${formattedValue}`;
+
+            // Calculate total for this time period
+            let total = 0;
+            context.chart.data.datasets.forEach((dataset: any) => {
+              total += dataset.data[context.dataIndex] || 0;
+            });
+
+            // Calculate percentage
+            const percentage = total > 0 ? ((value / total) * 100).toFixed(1) : '0.0';
+
+            return `${context.dataset.label}: ${formattedValue} (${percentage}%)`;
           },
         },
       },
