@@ -317,10 +317,10 @@ function PortfolioBreakdown() {
                 <button
                   key={option.value}
                   onClick={() => setTimeRange(option.value)}
-                  className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                  className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all ${
                     timeRange === option.value
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      ? 'bg-gray-200 text-gray-900 shadow-[inset_0_2px_4px_rgba(0,0,0,0.1)]'
+                      : 'bg-white text-gray-700 hover:bg-gray-50 shadow-sm'
                   }`}
                 >
                   {option.label}

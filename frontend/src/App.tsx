@@ -8,25 +8,25 @@ function Navigation() {
   const isActive = (path: string) => location.pathname === path;
 
   return (
-    <nav className="bg-white shadow-md mb-0">
+    <nav className="bg-white shadow-sm mb-0">
       <div className="container mx-auto px-4">
-        <div className="flex space-x-4 border-b border-gray-200">
+        <div className="flex gap-3 pt-3">
           <Link
             to="/"
-            className={`px-6 py-4 font-medium transition-all rounded-t-lg ${
+            className={`px-6 py-3 font-medium transition-all rounded-t-md ${
               isActive('/')
-                ? 'text-white bg-blue-600 shadow-lg'
-                : 'text-gray-600 bg-transparent hover:text-blue-600 hover:bg-blue-50'
+                ? 'bg-gray-100 text-gray-900 shadow-[inset_0_2px_4px_rgba(0,0,0,0.1)] border-b-2 border-gray-100'
+                : 'bg-white text-gray-600 hover:bg-gray-50 hover:text-gray-900 shadow-sm border-b-2 border-transparent'
             }`}
           >
             Net Worth
           </Link>
           <Link
             to="/portfolio"
-            className={`px-6 py-4 font-medium transition-all rounded-t-lg ${
+            className={`px-6 py-3 font-medium transition-all rounded-t-md ${
               isActive('/portfolio')
-                ? 'text-white bg-blue-600 shadow-lg'
-                : 'text-gray-600 bg-transparent hover:text-blue-600 hover:bg-blue-50'
+                ? 'bg-gray-100 text-gray-900 shadow-[inset_0_2px_4px_rgba(0,0,0,0.1)] border-b-2 border-gray-100'
+                : 'bg-white text-gray-600 hover:bg-gray-50 hover:text-gray-900 shadow-sm border-b-2 border-transparent'
             }`}
           >
             Portfolio Breakdown
