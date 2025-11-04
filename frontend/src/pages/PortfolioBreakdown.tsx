@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import axios from 'axios';
 import {
   Chart as ChartJS,
@@ -10,7 +10,7 @@ import {
   Legend,
 } from 'chart.js';
 import { Bar } from 'react-chartjs-2';
-import type { Account, Value, Portfolio, AssetClass } from '../types/api';
+import type { Account, Value, Portfolio } from '../types/api';
 
 ChartJS.register(
   CategoryScale,

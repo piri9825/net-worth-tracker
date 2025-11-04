@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { Account, Value } from '../types/api';
+import type { Account, Value } from '../types/api';
 
 const API_BASE_URL = 'http://localhost:8000/api';
 

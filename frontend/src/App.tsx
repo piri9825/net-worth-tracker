@@ -1,4 +1,3 @@
-import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Link, useLocation } from 'react-router-dom';
 import NetWorth from './pages/NetWorth';
 import PortfolioBreakdown from './pages/PortfolioBreakdown';
@@ -11,23 +10,23 @@ function Navigation() {
   return (
     <nav className="bg-white shadow-md mb-0">
       <div className="container mx-auto px-4">
-        <div className="flex space-x-1">
+        <div className="flex space-x-4 border-b border-gray-200">
           <Link
             to="/"
-            className={`px-6 py-4 font-medium transition-colors border-b-2 ${
+            className={`px-6 py-4 font-medium transition-all rounded-t-lg ${
               isActive('/')
-                ? 'text-blue-600 border-blue-600'
-                : 'text-gray-600 border-transparent hover:text-gray-900 hover:border-gray-300'
+                ? 'text-white bg-blue-600 shadow-lg'
+                : 'text-gray-600 bg-transparent hover:text-blue-600 hover:bg-blue-50'
             }`}
           >
             Net Worth
           </Link>
           <Link
             to="/portfolio"
-            className={`px-6 py-4 font-medium transition-colors border-b-2 ${
+            className={`px-6 py-4 font-medium transition-all rounded-t-lg ${
               isActive('/portfolio')
-                ? 'text-blue-600 border-blue-600'
-                : 'text-gray-600 border-transparent hover:text-gray-900 hover:border-gray-300'
+                ? 'text-white bg-blue-600 shadow-lg'
+                : 'text-gray-600 bg-transparent hover:text-blue-600 hover:bg-blue-50'
             }`}
           >
             Portfolio Breakdown
