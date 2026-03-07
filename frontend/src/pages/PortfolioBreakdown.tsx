@@ -158,8 +158,8 @@ function PortfolioBreakdown() {
           },
           label: (ctx: any) => {
             const value = ctx.parsed.y;
-            const total = ctx.chart.data.datasets.reduce(
-              (acc: number, ds: any) => acc + (ds.data[ctx.dataIndex] ?? 0), 0
+            const total = (ctx.chart.tooltip.dataPoints as any[]).reduce(
+              (acc: number, dp: any) => acc + dp.parsed.y, 0
             );
             const pct = total > 0 ? ((value / total) * 100).toFixed(1) : '0.0';
             return `${ctx.dataset.label}: ${fmtFull(value)} (${pct}%)`;
