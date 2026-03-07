@@ -1,12 +1,16 @@
 import { BrowserRouter as Router, Routes, Route, NavLink } from 'react-router-dom';
-import { TrendingUp, PieChart } from 'lucide-react';
+import { TrendingUp, PieChart, Sun, Moon } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
+import { Button } from '@/components/ui/button';
+import { useTheme } from './contexts/theme';
 import NetWorth from './pages/NetWorth';
 import PortfolioBreakdown from './pages/PortfolioBreakdown';
 
 function Navigation() {
+  const { theme, toggle } = useTheme();
+
   return (
-    <header className="bg-white border-b border-border sticky top-0 z-10">
+    <header className="bg-background border-b border-border sticky top-0 z-10">
       <div className="max-w-7xl mx-auto px-6">
         <div className="flex items-center h-14 gap-8">
           <div className="flex items-center gap-2">
@@ -14,7 +18,7 @@ function Navigation() {
             <span className="font-semibold text-sm tracking-tight">Net Worth Tracker</span>
           </div>
           <Separator orientation="vertical" className="h-5" />
-          <nav className="flex items-center gap-1">
+          <nav className="flex items-center gap-1 flex-1">
             <NavLink
               to="/"
               end
@@ -43,6 +47,9 @@ function Navigation() {
               Portfolio Breakdown
             </NavLink>
           </nav>
+          <Button variant="ghost" size="icon-sm" onClick={toggle} aria-label="Toggle theme">
+            {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+          </Button>
         </div>
       </div>
     </header>
@@ -54,7 +61,7 @@ function App() {
     <Router>
       <div className="min-h-screen bg-muted/30">
         <Navigation />
-        <main className="max-w-7xl mx-auto px-6 py-8">
+        <main className="max-w-7xl mx-auto px-6 py-6">
           <Routes>
             <Route path="/" element={<NetWorth />} />
             <Route path="/portfolio" element={<PortfolioBreakdown />} />
