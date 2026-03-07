@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react';
-import axios from 'axios';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -13,6 +12,16 @@ import {
 } from 'chart.js';
 import { Line } from 'react-chartjs-2';
 import 'chartjs-adapter-date-fns';
+import { Loader2 } from 'lucide-react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Label } from '@/components/ui/label';
+import { Separator } from '@/components/ui/separator';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
+import { Button } from '@/components/ui/button';
+import { accountsApi, valuesApi } from '../services/api';
+import type { Account, Value, ViewMode, Term, AccountType } from '../types/api';
 
 ChartJS.register(
   CategoryScale,
@@ -25,8 +34,20 @@ ChartJS.register(
   TimeScale
 );
 
-// Types
-import type { Account, Value, ViewMode, Term, AccountType } from '../types/api';
+const COLORS = [
+  '#3B82F6', '#EF4444', '#10B981', '#F59E0B', '#8B5CF6',
+  '#F97316', '#06B6D4', '#84CC16', '#EC4899', '#6B7280',
+];
+
+const TERM_STYLES: Record<NonNullable<Term>, string> = {
+  'Short Term': 'bg-sky-100 text-sky-800 border-sky-200',
+  'Long Term': 'bg-purple-100 text-purple-800 border-purple-200',
+};
+
+const TYPE_STYLES: Record<NonNullable<AccountType>, string> = {
+  'Asset': 'bg-emerald-100 text-emerald-800 border-emerald-200',
+  'Liability': 'bg-red-100 text-red-800 border-red-200',
+};
 
 function NetWorth() {
   const [accounts, setAccounts] = useState<Account[]>([]);
@@ -37,124 +58,65 @@ function NetWorth() {
   const [chartData, setChartData] = useState<any>(null);
   const [loading, setLoading] = useState(false);
 
-  // Fetch accounts on mount
   useEffect(() => {
-    const fetchAccounts = async () => {
-      try {
-        const response = await axios.get<Account[]>('http://localhost:8000/api/accounts/');
-        setAccounts(response.data);
-      } catch (error) {
-        console.error('Error fetching accounts:', error);
-      }
-    };
-
-    fetchAccounts();
+    accountsApi.getAll()
+      .then(setAccounts)
+      .catch(err => console.error('Error fetching accounts:', err));
   }, []);
 
-  // Filter accounts by selected term and type
   const filteredAccounts = accounts.filter(account => {
     const termMatch = selectedTerm.length === 0 || selectedTerm.includes(account.term ?? null);
     const typeMatch = selectedType.length === 0 || selectedType.includes(account.type ?? null);
     return termMatch && typeMatch;
   });
 
-  // Update selected accounts when filters change - keep only accounts that match the current filter
   useEffect(() => {
     if (selectedTerm.length > 0 || selectedType.length > 0) {
-      const validAccountNames = filteredAccounts.map(acc => acc.name);
-      const updatedSelectedAccounts = selectedAccounts.filter(accountName =>
-        validAccountNames.includes(accountName)
-      );
-
-      if (updatedSelectedAccounts.length !== selectedAccounts.length) {
-        setSelectedAccounts(updatedSelectedAccounts);
-      }
+      const validNames = filteredAccounts.map(a => a.name);
+      setSelectedAccounts(prev => prev.filter(n => validNames.includes(n)));
     }
-  }, [selectedTerm, selectedType, filteredAccounts]);
+  }, [selectedTerm, selectedType]);
 
-  // Update chart when selections change
   useEffect(() => {
-    const updateChart = async () => {
-      if (selectedAccounts.length === 0) {
-        setChartData(null);
-        return;
-      }
+    if (selectedAccounts.length === 0) {
+      setChartData(null);
+      return;
+    }
 
+    const updateChart = async () => {
       try {
         setLoading(true);
-        
-        // Fetch values for selected accounts
-        const valuesPromises = selectedAccounts.map(accountName =>
-          axios.get<Value[]>(`http://localhost:8000/api/values/account/${encodeURIComponent(accountName)}`)
+        const responses = await Promise.all(
+          selectedAccounts.map(name => valuesApi.getByAccount(name))
         );
-        
-        const valuesResponses = await Promise.all(valuesPromises);
-        const allValues = valuesResponses.flatMap(response => response.data);
-        
-        if (allValues.length === 0) {
-          setChartData(null);
-          return;
-        }
+        const allValues: Value[] = responses.flat().sort(
+          (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
+        );
 
-        // Sort values by date
-        allValues.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-
-        const colors = [
-          '#3B82F6', '#EF4444', '#10B981', '#F59E0B', '#8B5CF6', 
-          '#F97316', '#06B6D4', '#84CC16', '#EC4899', '#6B7280'
-        ];
+        if (allValues.length === 0) { setChartData(null); return; }
 
         let datasets;
-
         if (viewMode === 'aggregated') {
-          // Aggregate values by date
-          const aggregatedData: { [date: string]: number } = {};
-          
-          allValues.forEach(value => {
-            const dateKey = value.date.split('T')[0];
-            if (!aggregatedData[dateKey]) {
-              aggregatedData[dateKey] = 0;
-            }
-            aggregatedData[dateKey] += value.amount;
+          const byDate: Record<string, number> = {};
+          allValues.forEach(v => {
+            const d = v.date.split('T')[0];
+            byDate[d] = (byDate[d] ?? 0) + v.amount;
           });
-
-          const sortedDates = Object.keys(aggregatedData).sort();
-          const data = sortedDates.map(date => ({
-            x: date,
-            y: aggregatedData[date],
-          }));
-
-          datasets = [
-            {
-              label: 'Total Net Worth',
-              data,
-              borderColor: colors[0],
-              backgroundColor: colors[0] + '20',
-              tension: 0.1,
-            },
-          ];
+          const data = Object.keys(byDate).sort().map(x => ({ x, y: byDate[x] }));
+          datasets = [{ label: 'Total Net Worth', data, borderColor: COLORS[0], backgroundColor: COLORS[0] + '20', tension: 0.3 }];
         } else {
-          // Split view - one line per account
-          datasets = selectedAccounts.map((accountName, index) => {
-            const accountValues = allValues.filter(v => v.account_name === accountName);
-            const data = accountValues.map(value => ({
-              x: value.date.split('T')[0],
-              y: value.amount,
-            }));
-
-            return {
-              label: accountName,
-              data,
-              borderColor: colors[index % colors.length],
-              backgroundColor: colors[index % colors.length] + '20',
-              tension: 0.1,
-            };
-          });
+          datasets = selectedAccounts.map((name, i) => ({
+            label: name,
+            data: allValues.filter(v => v.account_name === name).map(v => ({ x: v.date.split('T')[0], y: v.amount })),
+            borderColor: COLORS[i % COLORS.length],
+            backgroundColor: COLORS[i % COLORS.length] + '20',
+            tension: 0.3,
+          }));
         }
 
         setChartData({ datasets });
-      } catch (error) {
-        console.error('Error fetching values:', error);
+      } catch (err) {
+        console.error('Error fetching values:', err);
       } finally {
         setLoading(false);
       }
@@ -167,317 +129,210 @@ function NetWorth() {
     responsive: true,
     maintainAspectRatio: false,
     plugins: {
-      legend: {
-        position: 'top' as const,
-      },
-      title: {
-        display: true,
-        text: viewMode === 'aggregated' ? 'Net Worth Over Time' : 'Account Values Over Time',
-      },
+      legend: { position: 'top' as const },
+      title: { display: false },
       tooltip: {
         mode: 'index' as const,
         intersect: false,
         callbacks: {
-          title: function(context: any) {
-            if (context.length > 0) {
-              const date = new Date(context[0].parsed.x);
-              return date.toLocaleDateString('en-GB', {
-                month: 'long',
-                year: 'numeric'
-              });
-            }
-            return '';
+          title: (ctx: any[]) => {
+            if (!ctx.length) return '';
+            return new Date(ctx[0].parsed.x).toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
           },
-          label: function(context: any) {
-            const value = context.parsed.y;
-            const formattedValue = new Intl.NumberFormat('en-GB', {
-              style: 'currency',
-              currency: 'GBP',
-            }).format(value);
-            return `${context.dataset.label}: ${formattedValue}`;
+          label: (ctx: any) => {
+            const formatted = new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP' }).format(ctx.parsed.y);
+            return `${ctx.dataset.label}: ${formatted}`;
           },
         },
       },
     },
     scales: {
-      x: {
-        type: 'time' as const,
-        time: {
-          unit: 'month' as const,
-        },
-        title: {
-          display: true,
-          text: 'Date',
-        },
-      },
+      x: { type: 'time' as const, time: { unit: 'month' as const }, title: { display: true, text: 'Date' } },
       y: {
-        title: {
-          display: true,
-          text: 'Value (£)',
-        },
+        title: { display: true, text: 'Value (£)' },
         ticks: {
-          callback: function(value: any) {
-            return new Intl.NumberFormat('en-GB', {
-              style: 'currency',
-              currency: 'GBP',
-              notation: 'compact',
-            }).format(value);
-          },
+          callback: (v: any) => new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP', notation: 'compact' }).format(v),
         },
       },
     },
-    interaction: {
-      mode: 'nearest' as const,
-      axis: 'x' as const,
-      intersect: false,
-    },
+    interaction: { mode: 'nearest' as const, axis: 'x' as const, intersect: false },
   };
 
-  const handleTermToggle = (term: Term) => {
-    if (selectedTerm.includes(term)) {
-      setSelectedTerm(selectedTerm.filter(t => t !== term));
-    } else {
-      setSelectedTerm([...selectedTerm, term]);
-    }
-  };
-
-  const handleTypeToggle = (type: AccountType) => {
-    if (selectedType.includes(type)) {
-      setSelectedType(selectedType.filter(t => t !== type));
-    } else {
-      setSelectedType([...selectedType, type]);
-    }
-  };
-
-  const handleAccountToggle = (accountName: string) => {
-    if (selectedAccounts.includes(accountName)) {
-      setSelectedAccounts(selectedAccounts.filter(name => name !== accountName));
-    } else {
-      setSelectedAccounts([...selectedAccounts, accountName]);
-    }
-  };
+  const toggleTerm = (term: Term) =>
+    setSelectedTerm(prev => prev.includes(term) ? prev.filter(t => t !== term) : [...prev, term]);
+  const toggleType = (type: AccountType) =>
+    setSelectedType(prev => prev.includes(type) ? prev.filter(t => t !== type) : [...prev, type]);
+  const toggleAccount = (name: string) =>
+    setSelectedAccounts(prev => prev.includes(name) ? prev.filter(n => n !== name) : [...prev, name]);
 
   return (
-    <div className="container mx-auto px-4 py-4">
-      {/* Header */}
-      <div className="mb-6">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">
-          Net Worth Tracker
-        </h1>
-        <p className="text-gray-600">
-          Track and visualize your account values over time
-        </p>
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight">Net Worth</h1>
+        <p className="text-muted-foreground mt-1">Track and visualize your account values over time.</p>
       </div>
 
-      {/* Account Selector with Integrated Filters */}
-      <div className="bg-white p-6 rounded-lg shadow-md mb-6">
-          {/* Header with Actions */}
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-medium text-gray-900">
-              Select Accounts ({filteredAccounts.length} available{selectedAccounts.length > 0 ? `, ${selectedAccounts.length} selected` : ''})
-            </h3>
-            <div className="flex space-x-2">
+      {/* Account selector */}
+      <Card>
+        <CardHeader className="pb-4">
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-base font-medium">
+              Accounts
+              <span className="ml-2 text-muted-foreground font-normal text-sm">
+                {filteredAccounts.length} available{selectedAccounts.length > 0 ? `, ${selectedAccounts.length} selected` : ''}
+              </span>
+            </CardTitle>
+            <div className="flex items-center gap-3">
+              <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setSelectedAccounts(filteredAccounts.map(a => a.name))}>
+                Select all
+              </Button>
+              <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setSelectedAccounts([])}>
+                Clear
+              </Button>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {/* Filters */}
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Type</span>
+            {(['Asset', 'Liability'] as AccountType[]).map(type => (
               <button
-                onClick={() => setSelectedAccounts(filteredAccounts.map(acc => acc.name))}
-                className="text-sm text-blue-600 hover:text-blue-800"
+                key={type}
+                onClick={() => toggleType(type)}
+                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium border transition-all ${
+                  selectedType.includes(type)
+                    ? TYPE_STYLES[type as NonNullable<AccountType>]
+                    : 'border-border bg-background text-muted-foreground hover:bg-secondary'
+                }`}
               >
-                Select All
+                <Checkbox
+                  checked={selectedType.includes(type)}
+                  onCheckedChange={() => toggleType(type)}
+                  className="h-3 w-3 pointer-events-none"
+                />
+                {type}
               </button>
-              <span className="text-gray-300">|</span>
+            ))}
+            <Separator orientation="vertical" className="h-4 mx-1" />
+            <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Term</span>
+            {(['Short Term', 'Long Term'] as Term[]).map(term => (
               <button
-                onClick={() => setSelectedAccounts([])}
-                className="text-sm text-blue-600 hover:text-blue-800"
+                key={term}
+                onClick={() => toggleTerm(term)}
+                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium border transition-all ${
+                  selectedTerm.includes(term)
+                    ? TERM_STYLES[term as NonNullable<Term>]
+                    : 'border-border bg-background text-muted-foreground hover:bg-secondary'
+                }`}
               >
-                Clear All
+                <Checkbox
+                  checked={selectedTerm.includes(term)}
+                  onCheckedChange={() => toggleTerm(term)}
+                  className="h-3 w-3 pointer-events-none"
+                />
+                {term}
               </button>
+            ))}
+            <div className="ml-auto flex items-center gap-2">
+              <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => { setSelectedTerm(['Short Term', 'Long Term']); setSelectedType(['Asset', 'Liability']); }}>
+                All filters
+              </Button>
+              <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => { setSelectedTerm([]); setSelectedType([]); }}>
+                Clear filters
+              </Button>
             </div>
           </div>
 
-          {/* Compact Filters */}
-          <div className="flex items-center gap-4 mb-4 pb-4 border-b border-gray-200">
-            <span className="text-sm font-medium text-gray-700">Filter:</span>
+          <Separator />
 
-            {/* Type Filters */}
-            <div className="flex items-center gap-3">
-              {(['Asset', 'Liability'] as AccountType[]).map((type) => (
-                <label
-                  key={type}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md border cursor-pointer transition-colors text-sm ${
-                    selectedType.includes(type)
-                      ? (type === 'Asset' ? 'bg-green-50 border-green-300 text-green-900' : 'bg-red-50 border-red-300 text-red-900')
-                      : 'bg-gray-50 border-gray-200 text-gray-700 hover:bg-gray-100'
+          {/* Account grid */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
+            {filteredAccounts.map(account => {
+              const isSelected = selectedAccounts.includes(account.name);
+              return (
+                <Label
+                  key={account.name}
+                  htmlFor={`account-${account.name}`}
+                  className={`flex items-start gap-2.5 p-3 rounded-lg border cursor-pointer transition-all ${
+                    isSelected ? 'bg-primary/5 border-primary/30' : 'border-border hover:bg-secondary/50'
                   }`}
                 >
-                  <input
-                    type="checkbox"
-                    checked={selectedType.includes(type)}
-                    onChange={() => handleTypeToggle(type)}
-                    className="w-3.5 h-3.5"
+                  <Checkbox
+                    id={`account-${account.name}`}
+                    checked={isSelected}
+                    onCheckedChange={() => toggleAccount(account.name)}
+                    className="mt-0.5 shrink-0"
                   />
-                  <span className="font-medium">{type}</span>
-                </label>
-              ))}
-            </div>
-
-            <span className="text-gray-300">|</span>
-
-            {/* Term Filters */}
-            <div className="flex items-center gap-3">
-              {(['Short Term', 'Long Term'] as Term[]).map((term) => (
-                <label
-                  key={term}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md border cursor-pointer transition-colors text-sm ${
-                    selectedTerm.includes(term)
-                      ? (term === 'Short Term' ? 'bg-sky-50 border-sky-300 text-sky-900' : 'bg-purple-50 border-purple-300 text-purple-900')
-                      : 'bg-gray-50 border-gray-200 text-gray-700 hover:bg-gray-100'
-                  }`}
-                >
-                  <input
-                    type="checkbox"
-                    checked={selectedTerm.includes(term)}
-                    onChange={() => handleTermToggle(term)}
-                    className="w-3.5 h-3.5"
-                  />
-                  <span className="font-medium">{term}</span>
-                </label>
-              ))}
-            </div>
-
-            <div className="ml-auto flex space-x-2">
-              <button
-                onClick={() => {
-                  setSelectedTerm(['Short Term', 'Long Term']);
-                  setSelectedType(['Asset', 'Liability']);
-                }}
-                className="text-xs text-blue-600 hover:text-blue-800 font-medium"
-              >
-                All Filters
-              </button>
-              <span className="text-gray-300">|</span>
-              <button
-                onClick={() => {
-                  setSelectedTerm([]);
-                  setSelectedType([]);
-                }}
-                className="text-xs text-blue-600 hover:text-blue-800 font-medium"
-              >
-                Clear Filters
-              </button>
-            </div>
-          </div>
-
-          {/* Account Grid */}
-          <div className="grid grid-cols-3 gap-3">
-            {filteredAccounts.map((account) => (
-              <div key={account.name} className="relative group">
-                <label
-                  className={`flex items-center space-x-2 p-3 rounded-lg border cursor-pointer transition-colors ${
-                    selectedAccounts.includes(account.name)
-                      ? 'bg-blue-50 border-blue-300'
-                      : 'bg-gray-50 border-gray-200 hover:bg-gray-100'
-                  }`}
-                >
-                  <input
-                    type="checkbox"
-                    checked={selectedAccounts.includes(account.name)}
-                    onChange={() => handleAccountToggle(account.name)}
-                    className="w-4 h-4"
-                  />
-                  <div className="flex-1 min-w-0">
-                    <div className="text-sm truncate">
-                      <span className="font-medium text-gray-900">{account.name}</span>
-                      {account.description && (
-                        <span className="text-xs text-gray-500 ml-2">({account.description})</span>
-                      )}
-                    </div>
-                    <div className="flex flex-wrap gap-1 mt-1">
+                  <div className="min-w-0 space-y-1.5">
+                    <p className="text-sm font-medium leading-none truncate">{account.name}</p>
+                    {account.description && (
+                      <p className="text-xs text-muted-foreground truncate">{account.description}</p>
+                    )}
+                    <div className="flex flex-wrap gap-1">
                       {account.type && (
-                        <span
-                          className={`inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium ${
-                            account.type === 'Asset' ? 'bg-green-100 text-green-800' :
-                            'bg-red-100 text-red-800'
-                          }`}
-                        >
+                        <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${TYPE_STYLES[account.type]}`}>
                           {account.type}
-                        </span>
+                        </Badge>
                       )}
                       {account.term && (
-                        <span
-                          className={`inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium ${
-                            account.term === 'Short Term' ? 'bg-sky-100 text-sky-800' :
-                            'bg-purple-100 text-purple-800'
-                          }`}
-                        >
+                        <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${TERM_STYLES[account.term]}`}>
                           {account.term}
-                        </span>
+                        </Badge>
                       )}
                     </div>
                   </div>
-                </label>
-              </div>
-            ))}
+                </Label>
+              );
+            })}
           </div>
-      </div>
+        </CardContent>
+      </Card>
 
       {/* Chart */}
-      <div className="bg-white p-6 rounded-lg shadow-md">
-          <div className="flex items-center justify-between mb-6">
-            <h3 className="text-lg font-semibold text-gray-900">
+      <Card>
+        <CardHeader className="pb-4">
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-base font-medium">
               {viewMode === 'aggregated' ? 'Net Worth Over Time' : 'Account Values Over Time'}
-            </h3>
-            
-            {/* View Mode Toggle - Integrated in Chart Header */}
-            <div className="flex space-x-1 bg-gray-100 rounded-lg p-1">
-              <button
-                onClick={() => setViewMode('aggregated')}
-                className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${
-                  viewMode === 'aggregated'
-                    ? 'bg-white text-gray-900 shadow-sm'
-                    : 'text-gray-600 hover:text-gray-900'
-                }`}
-              >
+            </CardTitle>
+            <ToggleGroup
+              value={[viewMode]}
+              onValueChange={v => v.length > 0 && setViewMode(v[v.length - 1] as ViewMode)}
+              className="bg-muted rounded-lg p-0.5"
+            >
+              <ToggleGroupItem value="aggregated" className="text-xs h-7 px-3 rounded-md data-[state=on]:bg-background data-[state=on]:shadow-sm">
                 Aggregated
-              </button>
-              <button
-                onClick={() => setViewMode('split')}
-                className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${
-                  viewMode === 'split'
-                    ? 'bg-white text-gray-900 shadow-sm'
-                    : 'text-gray-600 hover:text-gray-900'
-                }`}
-              >
+              </ToggleGroupItem>
+              <ToggleGroupItem value="split" className="text-xs h-7 px-3 rounded-md data-[state=on]:bg-background data-[state=on]:shadow-sm">
                 Split by Account
-              </button>
-            </div>
+              </ToggleGroupItem>
+            </ToggleGroup>
           </div>
-
+        </CardHeader>
+        <CardContent>
           {loading ? (
             <div className="flex items-center justify-center h-96">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
             </div>
-          ) : !chartData || chartData.datasets.length === 0 ? (
-            <div className="flex items-center justify-center h-96">
-              <div className="text-gray-500 text-center">
-                <div className="text-lg font-medium">No data to display</div>
-                <div className="text-sm mt-2">
-                  {selectedAccounts.length === 0 
-                    ? 'Please select some accounts to view the chart'
-                    : 'No data available for the selected accounts'
-                  }
-                </div>
-              </div>
+          ) : !chartData ? (
+            <div className="flex flex-col items-center justify-center h-96 text-center">
+              <p className="text-muted-foreground font-medium">No data to display</p>
+              <p className="text-muted-foreground text-sm mt-1">
+                {selectedAccounts.length === 0 ? 'Select accounts above to view the chart' : 'No data available for the selected accounts'}
+              </p>
             </div>
           ) : (
             <div className="h-96">
               <Line data={chartData} options={chartOptions} />
             </div>
           )}
-      </div>
+        </CardContent>
+      </Card>
 
-      {/* Footer */}
-      <div className="text-center text-sm text-gray-500 mt-4">
-        <p>Connected to API • {accounts.length} accounts loaded</p>
-      </div>
+      <p className="text-center text-xs text-muted-foreground">
+        {accounts.length} accounts loaded
+      </p>
     </div>
   );
 }

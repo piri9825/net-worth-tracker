@@ -1,66 +1,24 @@
-import axios from 'axios';
 import type { Account, Value } from '../types/api';
 
 const API_BASE_URL = 'http://localhost:8000/api';
 
-const apiClient = axios.create({
-  baseURL: API_BASE_URL,
-  headers: {
-    'Content-Type': 'application/json',
-  },
-});
+async function apiFetch<T>(path: string, params?: Record<string, string>): Promise<T> {
+  const url = new URL(`${API_BASE_URL}${path}`);
+  if (params) {
+    Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
+  }
+  const response = await fetch(url.toString(), {
+    headers: { 'Content-Type': 'application/json' },
+  });
+  if (!response.ok) throw new Error(`API error: ${response.status}`);
+  return response.json() as Promise<T>;
+}
 
 export const accountsApi = {
-  getAll: async (): Promise<Account[]> => {
-    const response = await apiClient.get<Account[]>('/accounts/');
-    return response.data;
-  },
-  
-  getByName: async (name: string): Promise<Account> => {
-    const response = await apiClient.get<Account>(`/accounts/${encodeURIComponent(name)}`);
-    return response.data;
-  },
+  getAll: () => apiFetch<Account[]>('/accounts/'),
 };
 
 export const valuesApi = {
-  getAll: async (params?: {
-    account_name?: string;
-    start_date?: string;
-    end_date?: string;
-    skip?: number;
-    limit?: number;
-  }): Promise<Value[]> => {
-    const response = await apiClient.get<Value[]>('/values/', { params });
-    return response.data;
-  },
-  
-  getByAccount: async (
-    accountName: string,
-    params?: {
-      start_date?: string;
-      end_date?: string;
-    }
-  ): Promise<Value[]> => {
-    const response = await apiClient.get<Value[]>(
-      `/values/account/${encodeURIComponent(accountName)}`,
-      { params }
-    );
-    return response.data;
-  },
-};
-
-export const dataService = {
-  getValuesByAccounts: async (
-    accounts: Account[],
-    dateRange?: { start_date?: string; end_date?: string }
-  ): Promise<Value[]> => {
-    const allValues: Value[] = [];
-
-    for (const account of accounts) {
-      const values = await valuesApi.getByAccount(account.name, dateRange);
-      allValues.push(...values);
-    }
-
-    return allValues.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-  },
+  getByAccount: (accountName: string, params?: { start_date?: string; end_date?: string }) =>
+    apiFetch<Value[]>(`/values/account/${encodeURIComponent(accountName)}`, params as Record<string, string>),
 };

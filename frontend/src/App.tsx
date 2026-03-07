@@ -1,51 +1,65 @@
-import { BrowserRouter as Router, Routes, Route, Link, useLocation } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, NavLink } from 'react-router-dom';
+import { TrendingUp, PieChart } from 'lucide-react';
+import { Separator } from '@/components/ui/separator';
 import NetWorth from './pages/NetWorth';
 import PortfolioBreakdown from './pages/PortfolioBreakdown';
 
 function Navigation() {
-  const location = useLocation();
-
-  const isActive = (path: string) => location.pathname === path;
-
   return (
-    <nav className="bg-white shadow-sm mb-0">
-      <div className="container mx-auto px-4">
-        <div className="flex gap-3 pt-3">
-          <Link
-            to="/"
-            className={`px-6 py-3 font-medium transition-all rounded-t-md ${
-              isActive('/')
-                ? 'bg-gray-100 text-gray-900 shadow-[inset_0_2px_4px_rgba(0,0,0,0.1)] border-b-2 border-gray-100'
-                : 'bg-white text-gray-600 hover:bg-gray-50 hover:text-gray-900 shadow-sm border-b-2 border-transparent'
-            }`}
-          >
-            Net Worth
-          </Link>
-          <Link
-            to="/portfolio"
-            className={`px-6 py-3 font-medium transition-all rounded-t-md ${
-              isActive('/portfolio')
-                ? 'bg-gray-100 text-gray-900 shadow-[inset_0_2px_4px_rgba(0,0,0,0.1)] border-b-2 border-gray-100'
-                : 'bg-white text-gray-600 hover:bg-gray-50 hover:text-gray-900 shadow-sm border-b-2 border-transparent'
-            }`}
-          >
-            Portfolio Breakdown
-          </Link>
+    <header className="bg-white border-b border-border sticky top-0 z-10">
+      <div className="max-w-7xl mx-auto px-6">
+        <div className="flex items-center h-14 gap-8">
+          <div className="flex items-center gap-2">
+            <TrendingUp className="h-5 w-5 text-primary" />
+            <span className="font-semibold text-sm tracking-tight">Net Worth Tracker</span>
+          </div>
+          <Separator orientation="vertical" className="h-5" />
+          <nav className="flex items-center gap-1">
+            <NavLink
+              to="/"
+              end
+              className={({ isActive }) =>
+                `flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                  isActive
+                    ? 'bg-secondary text-foreground'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-secondary/60'
+                }`
+              }
+            >
+              <TrendingUp className="h-4 w-4" />
+              Net Worth
+            </NavLink>
+            <NavLink
+              to="/portfolio"
+              className={({ isActive }) =>
+                `flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                  isActive
+                    ? 'bg-secondary text-foreground'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-secondary/60'
+                }`
+              }
+            >
+              <PieChart className="h-4 w-4" />
+              Portfolio Breakdown
+            </NavLink>
+          </nav>
         </div>
       </div>
-    </nav>
+    </header>
   );
 }
 
 function App() {
   return (
     <Router>
-      <div className="min-h-screen bg-blue-50">
+      <div className="min-h-screen bg-muted/30">
         <Navigation />
-        <Routes>
-          <Route path="/" element={<NetWorth />} />
-          <Route path="/portfolio" element={<PortfolioBreakdown />} />
-        </Routes>
+        <main className="max-w-7xl mx-auto px-6 py-8">
+          <Routes>
+            <Route path="/" element={<NetWorth />} />
+            <Route path="/portfolio" element={<PortfolioBreakdown />} />
+          </Routes>
+        </main>
       </div>
     </Router>
   );

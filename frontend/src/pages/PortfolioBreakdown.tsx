@@ -1,5 +1,4 @@
 import { useState, useEffect, useMemo } from 'react';
-import axios from 'axios';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -10,161 +9,117 @@ import {
   Legend,
 } from 'chart.js';
 import { Bar } from 'react-chartjs-2';
-import type { Account, Value, Portfolio } from '../types/api';
+import { Loader2 } from 'lucide-react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Label } from '@/components/ui/label';
+import { Separator } from '@/components/ui/separator';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
+import { Button } from '@/components/ui/button';
+import { accountsApi, valuesApi } from '../services/api';
+import type { Account, Portfolio } from '../types/api';
 
-ChartJS.register(
-  CategoryScale,
-  LinearScale,
-  BarElement,
-  Title,
-  Tooltip,
-  Legend
-);
+ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend);
+
+const ASSET_CLASS_COLORS: Record<string, string> = {
+  'Cash': '#10B981',
+  'Equities': '#3B82F6',
+  'Crypto': '#F59E0B',
+  'Real Estate': '#8B5CF6',
+};
+
+const PORTFOLIO_STYLES: Record<NonNullable<Portfolio>, string> = {
+  'Liquid': 'bg-blue-100 text-blue-800 border-blue-200',
+  'Illiquid': 'bg-amber-100 text-amber-800 border-amber-200',
+  'Cash Reserves': 'bg-emerald-100 text-emerald-800 border-emerald-200',
+};
+
+const ALL_PORTFOLIOS: Portfolio[] = ['Liquid', 'Illiquid', 'Cash Reserves'];
+
+type TimeRange = '3m' | '6m' | '1y' | 'all';
+
+const TIME_RANGE_OPTIONS: { value: TimeRange; label: string }[] = [
+  { value: '3m', label: '3M' },
+  { value: '6m', label: '6M' },
+  { value: '1y', label: '1Y' },
+  { value: 'all', label: 'All' },
+];
 
 function PortfolioBreakdown() {
   const [accounts, setAccounts] = useState<Account[]>([]);
-  const [selectedPortfolios, setSelectedPortfolios] = useState<Portfolio[]>(['Liquid', 'Illiquid', 'Cash Reserves']);
+  const [selectedPortfolios, setSelectedPortfolios] = useState<Portfolio[]>([...ALL_PORTFOLIOS]);
   const [chartData, setChartData] = useState<any>(null);
   const [loading, setLoading] = useState(false);
-  const [timeRange, setTimeRange] = useState<'3m' | '6m' | '1y' | 'all'>('1y');
+  const [timeRange, setTimeRange] = useState<TimeRange>('1y');
 
-  // Fetch accounts on mount
   useEffect(() => {
-    const fetchAccounts = async () => {
-      try {
-        const response = await axios.get<Account[]>('http://localhost:8000/api/accounts/');
-        setAccounts(response.data);
-      } catch (error) {
-        console.error('Error fetching accounts:', error);
-      }
-    };
-
-    fetchAccounts();
+    accountsApi.getAll()
+      .then(setAccounts)
+      .catch(err => console.error('Error fetching accounts:', err));
   }, []);
 
-  // Filter accounts by selected portfolios and ensure they have asset_class
-  const filteredAccounts = useMemo(() => {
-    return accounts.filter(account => {
-      const portfolioMatch = selectedPortfolios.includes(account.portfolio ?? null);
-      const hasAssetClass = account.asset_class !== null && account.asset_class !== undefined;
-      const isAsset = account.type === 'Asset';
-      return portfolioMatch && hasAssetClass && isAsset;
-    });
-  }, [accounts, selectedPortfolios]);
+  const filteredAccounts = useMemo(() => accounts.filter(account =>
+    selectedPortfolios.includes(account.portfolio ?? null) &&
+    account.asset_class != null &&
+    account.type === 'Asset'
+  ), [accounts, selectedPortfolios]);
 
-  const handlePortfolioToggle = (portfolio: Portfolio) => {
-    if (selectedPortfolios.includes(portfolio)) {
-      setSelectedPortfolios(selectedPortfolios.filter(p => p !== portfolio));
-    } else {
-      setSelectedPortfolios([...selectedPortfolios, portfolio]);
-    }
-  };
+  const togglePortfolio = (portfolio: Portfolio) =>
+    setSelectedPortfolios(prev =>
+      prev.includes(portfolio) ? prev.filter(p => p !== portfolio) : [...prev, portfolio]
+    );
 
-  // Update chart when selections change
   useEffect(() => {
-    const updateChart = async () => {
-      if (filteredAccounts.length === 0) {
-        setChartData(null);
-        return;
-      }
+    if (filteredAccounts.length === 0) { setChartData(null); return; }
 
+    const updateChart = async () => {
       try {
         setLoading(true);
 
-        // Fetch values for filtered accounts
-        const valuesPromises = filteredAccounts.map(account =>
-          axios.get<Value[]>(`http://localhost:8000/api/values/account/${encodeURIComponent(account.name)}`)
+        const responses = await Promise.all(
+          filteredAccounts.map(account => valuesApi.getByAccount(account.name))
         );
 
-        const valuesResponses = await Promise.all(valuesPromises);
-        const allValues = valuesResponses.flatMap((response, index) =>
-          response.data.map(value => ({
-            ...value,
-            asset_class: filteredAccounts[index].asset_class!
-          }))
+        const allValues = responses.flatMap((data, i) =>
+          data.map(v => ({ ...v, asset_class: filteredAccounts[i].asset_class! }))
         );
 
-        if (allValues.length === 0) {
-          setChartData(null);
-          return;
-        }
+        if (allValues.length === 0) { setChartData(null); return; }
 
-        // Calculate date cutoff based on time range
         const now = new Date();
-        let cutoffDate = new Date(0); // Default to all time
+        const cutoffs: Record<TimeRange, Date> = {
+          '3m': new Date(now.getFullYear(), now.getMonth() - 3, 1),
+          '6m': new Date(now.getFullYear(), now.getMonth() - 6, 1),
+          '1y': new Date(now.getFullYear() - 1, now.getMonth(), 1),
+          'all': new Date(0),
+        };
+        const filtered = allValues.filter(v => new Date(v.date) >= cutoffs[timeRange]);
 
-        switch (timeRange) {
-          case '3m':
-            cutoffDate = new Date(now.getFullYear(), now.getMonth() - 3, 1);
-            break;
-          case '6m':
-            cutoffDate = new Date(now.getFullYear(), now.getMonth() - 6, 1);
-            break;
-          case '1y':
-            cutoffDate = new Date(now.getFullYear() - 1, now.getMonth(), 1);
-            break;
-        }
-
-        // Filter values by date range
-        const filteredValues = allValues.filter(value =>
-          new Date(value.date) >= cutoffDate
-        );
-
-        // Group by month and asset class
-        const monthlyData: { [month: string]: { [assetClass: string]: number } } = {};
-
-        filteredValues.forEach(value => {
-          const date = new Date(value.date);
-          const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-
-          if (!monthlyData[monthKey]) {
-            monthlyData[monthKey] = {};
-          }
-
-          if (!monthlyData[monthKey][value.asset_class]) {
-            monthlyData[monthKey][value.asset_class] = 0;
-          }
-
-          monthlyData[monthKey][value.asset_class] += value.amount;
+        const monthlyData: Record<string, Record<string, number>> = {};
+        filtered.forEach(v => {
+          const d = new Date(v.date);
+          const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+          if (!monthlyData[key]) monthlyData[key] = {};
+          monthlyData[key][v.asset_class] = (monthlyData[key][v.asset_class] ?? 0) + v.amount;
         });
 
-        // Get sorted months
         const sortedMonths = Object.keys(monthlyData).sort();
+        const assetClasses = [...new Set(filtered.map(v => v.asset_class))].sort();
 
-        // Get all unique asset classes
-        const assetClasses = Array.from(
-          new Set(filteredValues.map(v => v.asset_class))
-        ).sort();
-
-        // Color mapping for asset classes
-        const colorMap: { [key: string]: string } = {
-          'Cash': '#10B981',      // green
-          'Equities': '#3B82F6',  // blue
-          'Crypto': '#F59E0B',    // orange
-          'Real Estate': '#8B5CF6' // purple
-        };
-
-        // Create datasets for each asset class
-        const datasets = assetClasses.map(assetClass => ({
-          label: assetClass,
-          data: sortedMonths.map(month => monthlyData[month][assetClass] || 0),
-          backgroundColor: colorMap[assetClass] || '#6B7280',
+        const datasets = assetClasses.map(ac => ({
+          label: ac,
+          data: sortedMonths.map(m => monthlyData[m][ac] ?? 0),
+          backgroundColor: ASSET_CLASS_COLORS[ac] ?? '#6B7280',
         }));
 
-        // Format month labels
-        const labels = sortedMonths.map(month => {
-          const [year, monthNum] = month.split('-');
-          const date = new Date(parseInt(year), parseInt(monthNum) - 1);
-          return date.toLocaleDateString('en-GB', { month: 'short', year: 'numeric' });
+        const labels = sortedMonths.map(m => {
+          const [y, mo] = m.split('-');
+          return new Date(parseInt(y), parseInt(mo) - 1).toLocaleDateString('en-GB', { month: 'short', year: 'numeric' });
         });
 
-        setChartData({
-          labels,
-          datasets,
-        });
-
-      } catch (error) {
-        console.error('Error fetching values:', error);
+        setChartData({ labels, datasets });
+      } catch (err) {
+        console.error('Error fetching values:', err);
       } finally {
         setLoading(false);
       }
@@ -177,192 +132,153 @@ function PortfolioBreakdown() {
     responsive: true,
     maintainAspectRatio: false,
     plugins: {
-      legend: {
-        position: 'top' as const,
-      },
-      title: {
-        display: true,
-        text: 'Asset Allocation by Portfolio',
-      },
+      legend: { position: 'top' as const },
+      title: { display: false },
       tooltip: {
         mode: 'index' as const,
         intersect: false,
         callbacks: {
-          footer: function(context: any) {
-            let sum = 0;
-            context.forEach((item: any) => {
-              sum += item.parsed.y;
-            });
-            return 'Total: ' + new Intl.NumberFormat('en-GB', {
-              style: 'currency',
-              currency: 'GBP',
-            }).format(sum);
+          footer: (ctx: any[]) => {
+            const sum = ctx.reduce((acc, item) => acc + item.parsed.y, 0);
+            return 'Total: ' + new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP' }).format(sum);
           },
-          label: function(context: any) {
-            const value = context.parsed.y;
-            const formattedValue = new Intl.NumberFormat('en-GB', {
-              style: 'currency',
-              currency: 'GBP',
-            }).format(value);
-
-            // Calculate total for this time period
-            let total = 0;
-            context.chart.data.datasets.forEach((dataset: any) => {
-              total += dataset.data[context.dataIndex] || 0;
-            });
-
-            // Calculate percentage
-            const percentage = total > 0 ? ((value / total) * 100).toFixed(1) : '0.0';
-
-            return `${context.dataset.label}: ${formattedValue} (${percentage}%)`;
+          label: (ctx: any) => {
+            const value = ctx.parsed.y;
+            const total = ctx.chart.data.datasets.reduce((acc: number, ds: any) => acc + (ds.data[ctx.dataIndex] ?? 0), 0);
+            const pct = total > 0 ? ((value / total) * 100).toFixed(1) : '0.0';
+            const formatted = new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP' }).format(value);
+            return `${ctx.dataset.label}: ${formatted} (${pct}%)`;
           },
         },
       },
     },
     scales: {
-      x: {
-        stacked: true,
-        title: {
-          display: true,
-          text: 'Month',
-        },
-      },
+      x: { stacked: true, title: { display: true, text: 'Month' } },
       y: {
         stacked: true,
-        title: {
-          display: true,
-          text: 'Value (£)',
-        },
+        title: { display: true, text: 'Value (£)' },
         ticks: {
-          callback: function(value: any) {
-            return new Intl.NumberFormat('en-GB', {
-              style: 'currency',
-              currency: 'GBP',
-              notation: 'compact',
-            }).format(value);
-          },
+          callback: (v: any) => new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP', notation: 'compact' }).format(v),
         },
       },
     },
   };
 
   return (
-    <div className="container mx-auto px-4 py-4">
-      {/* Header */}
-      <div className="mb-6">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">
-          Portfolio Breakdown
-        </h1>
-        <p className="text-gray-600">
-          Analyze your asset allocation across portfolios
-        </p>
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight">Portfolio Breakdown</h1>
+        <p className="text-muted-foreground mt-1">Analyze your asset allocation across portfolios.</p>
       </div>
 
       {/* Filters */}
-      <div className="bg-white p-6 rounded-lg shadow-md mb-6">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-medium text-gray-900">Filters</h3>
-            <div className="flex space-x-2">
-              <button
-                onClick={() => setSelectedPortfolios(['Liquid', 'Illiquid', 'Cash Reserves'])}
-                className="text-sm text-blue-600 hover:text-blue-800"
-              >
-                All
-              </button>
-              <span className="text-gray-300">|</span>
-              <button
-                onClick={() => setSelectedPortfolios([])}
-                className="text-sm text-blue-600 hover:text-blue-800"
-              >
-                Clear
-              </button>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-4">
-            {/* Portfolio Filters */}
-            <span className="text-sm font-medium text-gray-700">Portfolio:</span>
-            <div className="flex items-center gap-3">
-              {(['Liquid', 'Illiquid', 'Cash Reserves'] as Portfolio[]).map((portfolio) => (
-                <label
-                  key={portfolio}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md border cursor-pointer transition-colors text-sm ${
-                    selectedPortfolios.includes(portfolio)
-                      ? 'bg-blue-50 border-blue-300 text-blue-900'
-                      : 'bg-gray-50 border-gray-200 text-gray-700 hover:bg-gray-100'
-                  }`}
-                >
-                  <input
-                    type="checkbox"
-                    checked={selectedPortfolios.includes(portfolio)}
-                    onChange={() => handlePortfolioToggle(portfolio)}
-                    className="w-3.5 h-3.5"
-                  />
-                  <span className="font-medium">{portfolio}</span>
-                </label>
-              ))}
-            </div>
-
-            <span className="text-gray-300 mx-2">|</span>
-
-            {/* Time Range Filter */}
-            <span className="text-sm font-medium text-gray-700">Period:</span>
+      <Card>
+        <CardHeader className="pb-4">
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-base font-medium">
+              Filters
+              <span className="ml-2 text-muted-foreground font-normal text-sm">
+                {filteredAccounts.length} account{filteredAccounts.length !== 1 ? 's' : ''} matched
+              </span>
+            </CardTitle>
             <div className="flex items-center gap-2">
-              {[
-                { value: '3m' as const, label: '3 Months' },
-                { value: '6m' as const, label: '6 Months' },
-                { value: '1y' as const, label: '1 Year' },
-                { value: 'all' as const, label: 'All Time' },
-              ].map((option) => (
-                <button
-                  key={option.value}
-                  onClick={() => setTimeRange(option.value)}
-                  className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all ${
-                    timeRange === option.value
-                      ? 'bg-gray-200 text-gray-900 shadow-[inset_0_2px_4px_rgba(0,0,0,0.1)]'
-                      : 'bg-white text-gray-700 hover:bg-gray-50 shadow-sm'
-                  }`}
-                >
-                  {option.label}
-                </button>
-              ))}
+              <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setSelectedPortfolios([...ALL_PORTFOLIOS])}>
+                Select all
+              </Button>
+              <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setSelectedPortfolios([])}>
+                Clear
+              </Button>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-wrap items-center gap-4">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Portfolio</span>
+              <div className="flex flex-wrap gap-2">
+                {ALL_PORTFOLIOS.map(portfolio => (
+                  <button
+                    key={portfolio}
+                    onClick={() => togglePortfolio(portfolio)}
+                    className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium border transition-all ${
+                      selectedPortfolios.includes(portfolio)
+                        ? PORTFOLIO_STYLES[portfolio!]
+                        : 'border-border bg-background text-muted-foreground hover:bg-secondary'
+                    }`}
+                  >
+                    <Checkbox
+                      checked={selectedPortfolios.includes(portfolio)}
+                      onCheckedChange={() => togglePortfolio(portfolio)}
+                      className="h-3 w-3 pointer-events-none"
+                    />
+                    {portfolio}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <Separator orientation="vertical" className="h-6 hidden sm:block" />
+
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Period</span>
+              <ToggleGroup
+                value={[timeRange]}
+                onValueChange={v => v.length > 0 && setTimeRange(v[v.length - 1] as TimeRange)}
+                className="bg-muted rounded-lg p-0.5"
+              >
+                {TIME_RANGE_OPTIONS.map(opt => (
+                  <ToggleGroupItem
+                    key={opt.value}
+                    value={opt.value}
+                    className="text-xs h-7 px-3 rounded-md data-[state=on]:bg-background data-[state=on]:shadow-sm"
+                  >
+                    {opt.label}
+                  </ToggleGroupItem>
+                ))}
+              </ToggleGroup>
             </div>
           </div>
 
-          <div className="mt-3 text-sm text-gray-600">
-            {filteredAccounts.length} account{filteredAccounts.length !== 1 ? 's' : ''} selected
+          {/* Asset class legend */}
+          <div className="flex flex-wrap gap-3 mt-4 pt-4 border-t border-border">
+            {Object.entries(ASSET_CLASS_COLORS).map(([ac, color]) => (
+              <div key={ac} className="flex items-center gap-1.5">
+                <span className="h-2.5 w-2.5 rounded-sm shrink-0" style={{ backgroundColor: color }} />
+                <Label className="text-xs text-muted-foreground">{ac}</Label>
+              </div>
+            ))}
           </div>
-      </div>
+        </CardContent>
+      </Card>
 
       {/* Chart */}
-      <div className="bg-white p-6 rounded-lg shadow-md">
+      <Card>
+        <CardHeader className="pb-4">
+          <CardTitle className="text-base font-medium">Asset Allocation Over Time</CardTitle>
+        </CardHeader>
+        <CardContent>
           {loading ? (
             <div className="flex items-center justify-center h-96">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
             </div>
-          ) : !chartData || chartData.datasets.length === 0 ? (
-            <div className="flex items-center justify-center h-96">
-              <div className="text-gray-500 text-center">
-                <div className="text-lg font-medium">No data to display</div>
-                <div className="text-sm mt-2">
-                  {selectedPortfolios.length === 0
-                    ? 'Please select at least one portfolio'
-                    : 'No assets with asset classes found for the selected portfolios'
-                  }
-                </div>
-              </div>
+          ) : !chartData ? (
+            <div className="flex flex-col items-center justify-center h-96 text-center">
+              <p className="text-muted-foreground font-medium">No data to display</p>
+              <p className="text-muted-foreground text-sm mt-1">
+                {selectedPortfolios.length === 0 ? 'Select at least one portfolio' : 'No assets with asset classes found'}
+              </p>
             </div>
           ) : (
             <div className="h-96">
               <Bar data={chartData} options={chartOptions} />
             </div>
           )}
-      </div>
+        </CardContent>
+      </Card>
 
-      {/* Footer */}
-      <div className="text-center text-sm text-gray-500 mt-4">
-        <p>Connected to API • {accounts.length} accounts loaded</p>
-      </div>
+      <p className="text-center text-xs text-muted-foreground">
+        {accounts.length} accounts loaded
+      </p>
     </div>
   );
 }
