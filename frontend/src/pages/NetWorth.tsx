@@ -12,7 +12,7 @@ import {
 } from 'chart.js';
 import { Line } from 'react-chartjs-2';
 import 'chartjs-adapter-date-fns';
-import { Loader2 } from 'lucide-react';
+import { Loader2, ChevronDown, Users } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -20,18 +20,12 @@ import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { Button } from '@/components/ui/button';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { accountsApi, valuesApi } from '../services/api';
 import type { Account, Value, ViewMode, Term, AccountType } from '../types/api';
 
 ChartJS.register(
-  CategoryScale,
-  LinearScale,
-  PointElement,
-  LineElement,
-  Title,
-  Tooltip,
-  Legend,
-  TimeScale
+  CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, TimeScale
 );
 
 const COLORS = [
@@ -41,27 +35,62 @@ const COLORS = [
 
 const TERM_STYLES: Record<NonNullable<Term>, string> = {
   'Short Term': 'bg-sky-100 text-sky-800 border-sky-200',
-  'Long Term': 'bg-purple-100 text-purple-800 border-purple-200',
+  'Long Term':  'bg-purple-100 text-purple-800 border-purple-200',
 };
 
 const TYPE_STYLES: Record<NonNullable<AccountType>, string> = {
-  'Asset': 'bg-emerald-100 text-emerald-800 border-emerald-200',
+  'Asset':     'bg-emerald-100 text-emerald-800 border-emerald-200',
   'Liability': 'bg-red-100 text-red-800 border-red-200',
 };
+
+function FilterChip({
+  label,
+  active,
+  activeClass,
+  onToggle,
+}: {
+  label: string;
+  active: boolean;
+  activeClass: string;
+  onToggle: () => void;
+}) {
+  return (
+    <button
+      onClick={onToggle}
+      className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium border transition-all ${
+        active ? activeClass : 'border-border bg-background text-muted-foreground hover:bg-secondary'
+      }`}
+    >
+      <Checkbox
+        checked={active}
+        onCheckedChange={onToggle}
+        className="h-3 w-3 pointer-events-none"
+      />
+      {label}
+    </button>
+  );
+}
 
 function NetWorth() {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [selectedTerm, setSelectedTerm] = useState<Term[]>([]);
   const [selectedType, setSelectedType] = useState<AccountType[]>([]);
   const [selectedAccounts, setSelectedAccounts] = useState<string[]>([]);
+  const [popoverOpen, setPopoverOpen] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>('aggregated');
   const [chartData, setChartData] = useState<any>(null);
   const [loading, setLoading] = useState(false);
-
   useEffect(() => {
     accountsApi.getAll()
       .then(setAccounts)
       .catch(err => console.error('Error fetching accounts:', err));
+  }, []);
+
+  // Close popover when the page scrolls (not when scrolling inside the popover)
+  useEffect(() => {
+    const handleScroll = () => setPopoverOpen(false);
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
   const filteredAccounts = accounts.filter(account => {
@@ -70,18 +99,15 @@ function NetWorth() {
     return termMatch && typeMatch;
   });
 
+  // Drop accounts that no longer match the filter
   useEffect(() => {
-    if (selectedTerm.length > 0 || selectedType.length > 0) {
-      const validNames = filteredAccounts.map(a => a.name);
-      setSelectedAccounts(prev => prev.filter(n => validNames.includes(n)));
-    }
+    const validNames = new Set(filteredAccounts.map(a => a.name));
+    setSelectedAccounts(prev => prev.filter(n => validNames.has(n)));
   }, [selectedTerm, selectedType]);
 
+  // Fetch values and build chart
   useEffect(() => {
-    if (selectedAccounts.length === 0) {
-      setChartData(null);
-      return;
-    }
+    if (selectedAccounts.length === 0) { setChartData(null); return; }
 
     const updateChart = async () => {
       try {
@@ -92,7 +118,6 @@ function NetWorth() {
         const allValues: Value[] = responses.flat().sort(
           (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
         );
-
         if (allValues.length === 0) { setChartData(null); return; }
 
         let datasets;
@@ -103,17 +128,24 @@ function NetWorth() {
             byDate[d] = (byDate[d] ?? 0) + v.amount;
           });
           const data = Object.keys(byDate).sort().map(x => ({ x, y: byDate[x] }));
-          datasets = [{ label: 'Total Net Worth', data, borderColor: COLORS[0], backgroundColor: COLORS[0] + '20', tension: 0.3 }];
+          datasets = [{
+            label: 'Total Net Worth',
+            data,
+            borderColor: COLORS[0],
+            backgroundColor: COLORS[0] + '20',
+            tension: 0.3,
+          }];
         } else {
           datasets = selectedAccounts.map((name, i) => ({
             label: name,
-            data: allValues.filter(v => v.account_name === name).map(v => ({ x: v.date.split('T')[0], y: v.amount })),
+            data: allValues
+              .filter(v => v.account_name === name)
+              .map(v => ({ x: v.date.split('T')[0], y: v.amount })),
             borderColor: COLORS[i % COLORS.length],
             backgroundColor: COLORS[i % COLORS.length] + '20',
             tension: 0.3,
           }));
         }
-
         setChartData({ datasets });
       } catch (err) {
         console.error('Error fetching values:', err);
@@ -151,19 +183,18 @@ function NetWorth() {
       y: {
         title: { display: true, text: 'Value (£)' },
         ticks: {
-          callback: (v: any) => new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP', notation: 'compact' }).format(v),
+          callback: (v: any) =>
+            new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP', notation: 'compact' }).format(v),
         },
       },
     },
     interaction: { mode: 'nearest' as const, axis: 'x' as const, intersect: false },
   };
 
-  const toggleTerm = (term: Term) =>
-    setSelectedTerm(prev => prev.includes(term) ? prev.filter(t => t !== term) : [...prev, term]);
-  const toggleType = (type: AccountType) =>
-    setSelectedType(prev => prev.includes(type) ? prev.filter(t => t !== type) : [...prev, type]);
   const toggleAccount = (name: string) =>
-    setSelectedAccounts(prev => prev.includes(name) ? prev.filter(n => n !== name) : [...prev, name]);
+    setSelectedAccounts(prev =>
+      prev.includes(name) ? prev.filter(n => n !== name) : [...prev, name]
+    );
 
   return (
     <div className="space-y-6">
@@ -172,119 +203,147 @@ function NetWorth() {
         <p className="text-muted-foreground mt-1">Track and visualize your account values over time.</p>
       </div>
 
-      {/* Account selector */}
+      {/* Compact filter bar */}
       <Card>
-        <CardHeader className="pb-4">
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-base font-medium">
-              Accounts
-              <span className="ml-2 text-muted-foreground font-normal text-sm">
-                {filteredAccounts.length} available{selectedAccounts.length > 0 ? `, ${selectedAccounts.length} selected` : ''}
-              </span>
-            </CardTitle>
-            <div className="flex items-center gap-3">
-              <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setSelectedAccounts(filteredAccounts.map(a => a.name))}>
-                Select all
-              </Button>
-              <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setSelectedAccounts([])}>
-                Clear
-              </Button>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {/* Filters */}
+        <CardContent className="py-3">
           <div className="flex flex-wrap items-center gap-2">
+
+            {/* Type filters */}
             <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Type</span>
-            {(['Asset', 'Liability'] as AccountType[]).map(type => (
-              <button
+            {(['Asset', 'Liability'] as NonNullable<AccountType>[]).map(type => (
+              <FilterChip
                 key={type}
-                onClick={() => toggleType(type)}
-                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium border transition-all ${
-                  selectedType.includes(type)
-                    ? TYPE_STYLES[type as NonNullable<AccountType>]
-                    : 'border-border bg-background text-muted-foreground hover:bg-secondary'
-                }`}
-              >
-                <Checkbox
-                  checked={selectedType.includes(type)}
-                  onCheckedChange={() => toggleType(type)}
-                  className="h-3 w-3 pointer-events-none"
-                />
-                {type}
-              </button>
+                label={type}
+                active={selectedType.includes(type)}
+                activeClass={TYPE_STYLES[type]}
+                onToggle={() =>
+                  setSelectedType(prev =>
+                    prev.includes(type) ? prev.filter(t => t !== type) : [...prev, type]
+                  )
+                }
+              />
             ))}
-            <Separator orientation="vertical" className="h-4 mx-1" />
+
+            <Separator orientation="vertical" className="h-4" />
+
+            {/* Term filters */}
             <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Term</span>
-            {(['Short Term', 'Long Term'] as Term[]).map(term => (
-              <button
+            {(['Short Term', 'Long Term'] as NonNullable<Term>[]).map(term => (
+              <FilterChip
                 key={term}
-                onClick={() => toggleTerm(term)}
-                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium border transition-all ${
-                  selectedTerm.includes(term)
-                    ? TERM_STYLES[term as NonNullable<Term>]
-                    : 'border-border bg-background text-muted-foreground hover:bg-secondary'
-                }`}
-              >
-                <Checkbox
-                  checked={selectedTerm.includes(term)}
-                  onCheckedChange={() => toggleTerm(term)}
-                  className="h-3 w-3 pointer-events-none"
-                />
-                {term}
-              </button>
+                label={term}
+                active={selectedTerm.includes(term)}
+                activeClass={TERM_STYLES[term]}
+                onToggle={() =>
+                  setSelectedTerm(prev =>
+                    prev.includes(term) ? prev.filter(t => t !== term) : [...prev, term]
+                  )
+                }
+              />
             ))}
-            <div className="ml-auto flex items-center gap-2">
-              <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => { setSelectedTerm(['Short Term', 'Long Term']); setSelectedType(['Asset', 'Liability']); }}>
-                All filters
-              </Button>
-              <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => { setSelectedTerm([]); setSelectedType([]); }}>
-                Clear filters
-              </Button>
-            </div>
-          </div>
 
-          <Separator />
+            <Separator orientation="vertical" className="h-4" />
 
-          {/* Account grid */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
-            {filteredAccounts.map(account => {
-              const isSelected = selectedAccounts.includes(account.name);
-              return (
-                <Label
-                  key={account.name}
-                  htmlFor={`account-${account.name}`}
-                  className={`flex items-start gap-2.5 p-3 rounded-lg border cursor-pointer transition-all ${
-                    isSelected ? 'bg-primary/5 border-primary/30' : 'border-border hover:bg-secondary/50'
-                  }`}
-                >
-                  <Checkbox
-                    id={`account-${account.name}`}
-                    checked={isSelected}
-                    onCheckedChange={() => toggleAccount(account.name)}
-                    className="mt-0.5 shrink-0"
-                  />
-                  <div className="min-w-0 space-y-1.5">
-                    <p className="text-sm font-medium leading-none truncate">{account.name}</p>
-                    {account.description && (
-                      <p className="text-xs text-muted-foreground truncate">{account.description}</p>
-                    )}
-                    <div className="flex flex-wrap gap-1">
-                      {account.type && (
-                        <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${TYPE_STYLES[account.type]}`}>
-                          {account.type}
-                        </Badge>
-                      )}
-                      {account.term && (
-                        <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${TERM_STYLES[account.term]}`}>
-                          {account.term}
-                        </Badge>
-                      )}
-                    </div>
+            {/* Account popover */}
+            <Popover
+              open={popoverOpen}
+              onOpenChange={(open: boolean) => setPopoverOpen(open)}
+            >
+              <PopoverTrigger
+                className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md text-xs font-medium border border-border bg-background hover:bg-secondary transition-colors"
+              >
+                <Users className="h-3.5 w-3.5 text-muted-foreground" />
+                {selectedAccounts.length > 0
+                  ? `${selectedAccounts.length} of ${filteredAccounts.length} accounts`
+                  : `${filteredAccounts.length} accounts`}
+                <ChevronDown className={`h-3 w-3 text-muted-foreground transition-transform ${popoverOpen ? 'rotate-180' : ''}`} />
+              </PopoverTrigger>
+              <PopoverContent
+                className="w-[520px]"
+                align="start"
+                sideOffset={6}
+              >
+                {/* Popover header */}
+                <div className="flex items-center justify-between mb-3">
+                  <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                    Select accounts
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setSelectedAccounts(filteredAccounts.map(a => a.name))}
+                      className="text-xs text-blue-600 hover:text-blue-800"
+                    >
+                      Select all
+                    </button>
+                    <span className="text-border">|</span>
+                    <button
+                      onClick={() => setSelectedAccounts([])}
+                      className="text-xs text-blue-600 hover:text-blue-800"
+                    >
+                      Clear
+                    </button>
                   </div>
-                </Label>
-              );
-            })}
+                </div>
+
+                {/* Account grid */}
+                <div className="grid grid-cols-2 gap-1.5 max-h-72 overflow-y-auto pr-1">
+                  {filteredAccounts.map(account => {
+                    const isSelected = selectedAccounts.includes(account.name);
+                    return (
+                      <Label
+                        key={account.name}
+                        htmlFor={`pop-account-${account.name}`}
+                        className={`flex items-start gap-2 p-2.5 rounded-md border cursor-pointer transition-all ${
+                          isSelected
+                            ? 'bg-primary/5 border-primary/30'
+                            : 'border-border hover:bg-secondary/50'
+                        }`}
+                      >
+                        <Checkbox
+                          id={`pop-account-${account.name}`}
+                          checked={isSelected}
+                          onCheckedChange={() => toggleAccount(account.name)}
+                          className="mt-0.5 shrink-0"
+                        />
+                        <div className="min-w-0 space-y-1">
+                          <p className="text-xs font-medium leading-none truncate">{account.name}</p>
+                          <div className="flex flex-wrap gap-1">
+                            {account.type && (
+                              <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${TYPE_STYLES[account.type]}`}>
+                                {account.type}
+                              </Badge>
+                            )}
+                            {account.term && (
+                              <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${TERM_STYLES[account.term]}`}>
+                                {account.term}
+                              </Badge>
+                            )}
+                          </div>
+                        </div>
+                      </Label>
+                    );
+                  })}
+                </div>
+              </PopoverContent>
+            </Popover>
+
+            {/* Quick actions */}
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 text-xs"
+              onClick={() => setSelectedAccounts(filteredAccounts.map(a => a.name))}
+            >
+              Select all
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 text-xs"
+              onClick={() => setSelectedAccounts([])}
+            >
+              Clear
+            </Button>
           </div>
         </CardContent>
       </Card>
@@ -295,6 +354,11 @@ function NetWorth() {
           <div className="flex items-center justify-between">
             <CardTitle className="text-base font-medium">
               {viewMode === 'aggregated' ? 'Net Worth Over Time' : 'Account Values Over Time'}
+              {selectedAccounts.length > 0 && (
+                <span className="ml-2 text-sm font-normal text-muted-foreground">
+                  {selectedAccounts.length} account{selectedAccounts.length !== 1 ? 's' : ''}
+                </span>
+              )}
             </CardTitle>
             <ToggleGroup
               value={[viewMode]}
@@ -319,7 +383,9 @@ function NetWorth() {
             <div className="flex flex-col items-center justify-center h-96 text-center">
               <p className="text-muted-foreground font-medium">No data to display</p>
               <p className="text-muted-foreground text-sm mt-1">
-                {selectedAccounts.length === 0 ? 'Select accounts above to view the chart' : 'No data available for the selected accounts'}
+                {selectedAccounts.length === 0
+                  ? 'Use the filter bar above to select accounts'
+                  : 'No data available for the selected accounts'}
               </p>
             </div>
           ) : (
