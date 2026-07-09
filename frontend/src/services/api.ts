@@ -14,8 +14,37 @@ async function apiFetch<T>(path: string, params?: Record<string, string>): Promi
   return response.json() as Promise<T>;
 }
 
+async function apiPost<T>(path: string): Promise<T> {
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+  });
+  if (!response.ok) {
+    let detail = `API error: ${response.status}`;
+    try {
+      const body = await response.json();
+      if (typeof body.detail === 'string') detail = body.detail;
+    } catch {
+      // keep the generic message
+    }
+    throw new Error(detail);
+  }
+  return response.json() as Promise<T>;
+}
+
+export interface SyncResult {
+  accounts_loaded: number;
+  values_loaded: number;
+  file_name: string;
+  drive_modified_time: string;
+}
+
 export const accountsApi = {
   getAll: () => apiFetch<Account[]>('/accounts/'),
+};
+
+export const syncApi = {
+  run: () => apiPost<SyncResult>('/sync/'),
 };
 
 export const valuesApi = {

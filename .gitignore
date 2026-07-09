@@ -203,3 +203,6 @@ lerna-debug.log*
 # Additional files to ignore
 net_worth_tracker.db
 Net Worth Tracker.xlsx
+
+# Google Drive service account credentials
+secrets/
