@@ -1,17 +1,47 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { BrowserRouter as Router, Routes, Route, NavLink } from 'react-router-dom';
 import { TrendingUp, PieChart, Sun, Moon, RefreshCw } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
 import { Button } from '@/components/ui/button';
 import { useTheme } from './contexts/theme';
-import { syncApi } from './services/api';
+import { syncApi, type SyncStatus } from './services/api';
 import NetWorth from './pages/NetWorth';
 import PortfolioBreakdown from './pages/PortfolioBreakdown';
 
+// Backend datetimes are UTC but serialized without a timezone suffix
+function parseUtc(value: string): Date {
+  return new Date(/Z$|[+-]\d\d:\d\d$/.test(value) ? value : `${value}Z`);
+}
+
+function formatStatus(status: SyncStatus): string | null {
+  const parts: string[] = [];
+  if (status.latest_value_date) {
+    const asOf = parseUtc(status.latest_value_date);
+    parts.push(`Data to ${asOf.toLocaleDateString(undefined, { month: 'short', year: 'numeric' })}`);
+  }
+  if (status.last_synced_at) {
+    const synced = parseUtc(status.last_synced_at);
+    const sameDay = synced.toDateString() === new Date().toDateString();
+    parts.push(
+      `synced ${
+        sameDay
+          ? synced.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
+          : synced.toLocaleDateString(undefined, { day: 'numeric', month: 'short' })
+      }`
+    );
+  }
+  return parts.length ? parts.join(' · ') : null;
+}
+
 function SyncButton({ onSynced }: { onSynced: () => void }) {
   const [syncing, setSyncing] = useState(false);
+  const [status, setStatus] = useState<SyncStatus | null>(null);
   const [message, setMessage] = useState<{ text: string; error: boolean } | null>(null);
   const clearTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+
+  useEffect(() => {
+    syncApi.status().then(setStatus).catch(console.error);
+  }, []);
 
   const handleSync = async () => {
     setSyncing(true);
@@ -26,6 +56,7 @@ function SyncButton({ onSynced }: { onSynced: () => void }) {
         error: false,
       });
       clearTimer.current = setTimeout(() => setMessage(null), 4000);
+      syncApi.status().then(setStatus).catch(console.error);
       onSynced();
     } catch (e) {
       setMessage({ text: e instanceof Error ? e.message : 'Sync failed', error: true });
@@ -34,14 +65,18 @@ function SyncButton({ onSynced }: { onSynced: () => void }) {
     }
   };
 
+  const statusText = status ? formatStatus(status) : null;
+
   return (
     <div className="flex items-center gap-2">
-      {message && (
+      {message ? (
         <span
           className={`text-xs ${message.error ? 'text-destructive' : 'text-muted-foreground'}`}
         >
           {message.text}
         </span>
+      ) : (
+        statusText && <span className="text-xs text-muted-foreground">{statusText}</span>
       )}
       <Button
         variant="ghost"

@@ -1,10 +1,14 @@
 import threading
+from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.database import get_db
+from app.models.sync_state import SyncState
+from app.models.value import Value
 from app.services.drive import DriveConfigError, DriveError
 from app.services.importer import ExcelParseError
 from app.services.sync import SyncNotConfigured, run_drive_sync
@@ -13,6 +17,24 @@ router = APIRouter()
 
 # One sync at a time - overlapping wipe-and-reloads would corrupt the data
 _sync_lock = threading.Lock()
+
+
+class SyncStatus(BaseModel):
+    file_name: str | None
+    last_synced_at: datetime | None
+    latest_value_date: datetime | None
+
+
+@router.get("/status", response_model=SyncStatus)
+def sync_status(db: Session = Depends(get_db)):
+    """When the data was last synced and how recent it is."""
+    state = db.get(SyncState, 1)
+    latest_value_date = db.query(func.max(Value.date)).scalar()
+    return SyncStatus(
+        file_name=state.file_name if state else None,
+        last_synced_at=state.synced_at if state else None,
+        latest_value_date=latest_value_date,
+    )
 
 
 class SyncResult(BaseModel):

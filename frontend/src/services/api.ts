@@ -45,8 +45,15 @@ export const accountsApi = {
   getAll: () => apiFetch<Account[]>('/accounts/'),
 };
 
+export interface SyncStatus {
+  file_name: string | null;
+  last_synced_at: string | null;
+  latest_value_date: string | null;
+}
+
 export const syncApi = {
   run: () => apiPost<SyncResult>('/sync/'),
+  status: () => apiFetch<SyncStatus>('/sync/status'),
 };
 
 export const valuesApi = {
