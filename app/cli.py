@@ -91,7 +91,10 @@ def main():
     if args.dev:
         vite = subprocess.Popen([_npm(), "run", "dev"], cwd=FRONTEND)
         if not args.no_browser:
-            _open_browser_when_ready("http://localhost:5173", 5173)
+            # Wait on the backend, not Vite: Vite is up in milliseconds, but
+            # the API only accepts connections after its startup Drive sync,
+            # and the page is empty until the API is reachable
+            _open_browser_when_ready("http://localhost:5173", args.port)
         try:
             uvicorn.run("app.main:app", port=args.port, reload=True)
         finally:
