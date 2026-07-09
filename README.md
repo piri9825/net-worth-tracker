@@ -14,10 +14,10 @@ A full-stack web application for tracking and visualizing account values over ti
 
 ## Requirements
 
-- **Python 3.13+**
-- **Node.js & npm** (for frontend)
+- **Python 3.13+** (managed with [uv](https://docs.astral.sh/uv/))
+- **Node.js & npm** (used to build the frontend)
 - **SQLite** (automatically handled)
-- **Excel file**: `Net Worth Tracker.xlsx` with your data
+- **Your data**: a `Net Worth Tracker` spreadsheet in Google Drive (recommended, see [Google Drive Sync Setup](#google-drive-sync-setup)) or a local `Net Worth Tracker.xlsx`
 
 ## Project Structure
 
@@ -28,14 +28,18 @@ net-worth-tracker/
 │   ├── database/          # Database configuration
 │   ├── models/            # SQLAlchemy models
 │   ├── schemas/           # Pydantic schemas
+│   ├── services/          # Drive download, Excel import, sync
+│   ├── cli.py             # `uv run tracker` entry point
+│   ├── config.py          # .env settings
 │   └── enums.py           # Account classification enums
 ├── frontend/              # React frontend
 │   └── src/
 │       ├── types/         # TypeScript type definitions
 │       └── components/    # React components
 ├── scripts/               # Data loading scripts
-│   └── load_from_excel.py # Main data import script
-└── Net Worth Tracker.xlsx # Your data file
+│   └── load_from_excel.py # Local-file import (Drive-less fallback)
+├── secrets/               # Google service account key (gitignored)
+└── .env                   # DRIVE_FILE_ID etc. (gitignored)
 ```
 
 ## Account Data Model
@@ -51,26 +55,15 @@ All fields are nullable - accounts without specific classifications will simply 
 
 ## Setup & Installation
 
-### 1. Backend Setup (Python/FastAPI)
-
 ```bash
-# Install Python dependencies
-uv venv --python 3.13
 uv sync
 ```
 
-### 2. Frontend Setup (React/TypeScript)
+That's the only install step — the first `uv run tracker` installs the frontend dependencies and builds the frontend automatically. Then do the one-time [Google Drive Sync Setup](#google-drive-sync-setup) below.
 
-```bash
-cd frontend
-npm install
-```
+### Spreadsheet Format
 
-### 3. Data Preparation
-
-Prepare your `Net Worth Tracker.xlsx` file in the root directory with the following structure:
-
-**Excel Format (first row is headers):**
+The workbook needs a sheet named **"Net Worth"** with the following structure (first row is headers):
 - Column 0: **Description** (used to detect data rows - must not be empty)
 - Column 1: **Term** (Short Term, Long Term, or empty)
 - Column 2: **Type** (Asset, Liability, or empty)
@@ -79,7 +72,7 @@ Prepare your `Net Worth Tracker.xlsx` file in the root directory with the follow
 - Column 5: **Account** (Account name - required)
 - Column 6+: **Date columns** (dates in first row, values in data rows)
 
-The script stops reading when it encounters a row with an empty Description field (used to separate data from summary rows).
+Reading stops at the first row with an empty Description field (used to separate data from summary rows). Accounts appearing in multiple rows have their values summed per date.
 
 ## Running the Application
 
@@ -99,48 +92,16 @@ uv run tracker --dev           # for frontend development: also starts the Vite
                                # reload, backend restarts on code changes
 ```
 
-<details>
-<summary>Running the servers manually instead</summary>
+### Loading data without Drive
 
-### 1. Start the Backend Server
-
-```bash
-# From the root directory
-uv run uvicorn app.main:app --reload --port 8000
-```
-
-The API will be available at: http://localhost:8000
-- API docs: http://localhost:8000/api/docs
-
-### 2. Load Data
-
-**Option A — Sync from Google Drive (recommended):** click the refresh icon in the dashboard header. Requires the one-time [Google Drive setup](#google-drive-sync-setup) below.
-
-**Option B — Load a local file:**
+If you'd rather not use Google Drive (or need a one-off import), load a local workbook directly into the database — no server needed:
 
 ```bash
-# Import your data (clears existing data and loads fresh)
 uv run python scripts/load_from_excel.py            # uses "Net Worth Tracker.xlsx"
 uv run python scripts/load_from_excel.py my.xlsx    # or an explicit path
 ```
 
-The script writes directly to the database (the API server does not need to be running). Both options:
-- Replace all existing accounts and values in a single transaction (existing data is kept if anything fails)
-- Read the "Net Worth" sheet using the header row
-- Create accounts with structured classifications (Term, Type, Portfolio, Asset Class)
-- Aggregate values for accounts that appear in multiple rows
-- Import all historical values
-
-### 3. Start the Frontend Server
-
-```bash
-cd frontend
-npm run dev
-```
-
-The frontend will be available at: http://localhost:5173
-
-</details>
+Like the Drive sync, this replaces all accounts and values in a single transaction — existing data is kept if anything fails.
 
 ## Google Drive Sync Setup
 
@@ -170,5 +131,5 @@ DRIVE_FILE_ID=<FILE_ID>
 
 ### 4. Sync
 
-With the backend running, click the refresh icon in the dashboard header (or `curl -X POST http://localhost:8000/api/sync/`). The workbook is downloaded from Drive, parsed, and loaded in one transaction — your typical flow becomes: edit the sheet in Drive, click sync, done. Native Google Sheets work too (exported as xlsx automatically).
+`uv run tracker` syncs automatically on startup, and the refresh icon in the dashboard header re-syncs any time (there's also `POST /api/sync/` if you want it scripted). The workbook is downloaded from Drive, parsed, and loaded in one transaction — your typical flow becomes: edit the sheet in Drive, start (or re-sync) the app, done. Native Google Sheets work too (exported as xlsx automatically).
 
