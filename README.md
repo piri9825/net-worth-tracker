@@ -87,7 +87,7 @@ The script stops reading when it encounters a row with an empty Description fiel
 uv run tracker
 ```
 
-That's it — one command builds the frontend if needed, starts the server, and opens the dashboard at http://localhost:8000 (API docs at http://localhost:8000/api/docs). Load fresh data by clicking the sync icon in the header.
+That's it — one command builds the frontend if needed, starts the server, syncs the latest data from Google Drive, and opens the dashboard at http://localhost:8000 (API docs at http://localhost:8000/api/docs). If Drive is unreachable or not configured, it starts with the existing data — use the sync icon in the header to re-sync any time.
 
 Options:
 

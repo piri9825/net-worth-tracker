@@ -8,6 +8,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.api import api_router
 from app.database import init_db, SessionLocal
+from app.services.sync import sync_on_startup
 
 FRONTEND_DIST = Path(__file__).resolve().parent.parent / "frontend" / "dist"
 
@@ -17,6 +18,7 @@ async def lifespan(app: FastAPI):
     # Startup: Initialize database
     init_db()
     print("Database initialized")
+    sync_on_startup()
 
     yield
 
@@ -70,6 +72,7 @@ else:
             "message": "Net Worth Tracker API (frontend not built - run: uv run tracker)",
             "docs": "/api/docs or /api/redoc",
         }
+
 
 if __name__ == "__main__":
     import uvicorn

@@ -10,9 +10,11 @@ reloading backend.
 import argparse
 import os
 import shutil
+import socket
 import subprocess
 import sys
 import threading
+import time
 import webbrowser
 from pathlib import Path
 
@@ -53,8 +55,21 @@ def _build_frontend():
     subprocess.run([_npm(), "run", "build"], cwd=FRONTEND, check=True)
 
 
-def _open_browser_soon(url: str):
-    threading.Timer(1.5, webbrowser.open, [url]).start()
+def _open_browser_when_ready(url: str, port: int, timeout: float = 60.0):
+    """Open the browser once the server accepts connections (startup can
+    take a few seconds while it syncs from Drive)."""
+
+    def wait_and_open():
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            try:
+                with socket.create_connection(("127.0.0.1", port), timeout=1):
+                    break
+            except OSError:
+                time.sleep(0.3)
+        webbrowser.open(url)
+
+    threading.Thread(target=wait_and_open, daemon=True).start()
 
 
 def main():
@@ -76,7 +91,7 @@ def main():
     if args.dev:
         vite = subprocess.Popen([_npm(), "run", "dev"], cwd=FRONTEND)
         if not args.no_browser:
-            _open_browser_soon("http://localhost:5173")
+            _open_browser_when_ready("http://localhost:5173", 5173)
         try:
             uvicorn.run("app.main:app", port=args.port, reload=True)
         finally:
@@ -87,7 +102,7 @@ def main():
     if _frontend_is_stale():
         _build_frontend()
     if not args.no_browser:
-        _open_browser_soon(f"http://localhost:{args.port}")
+        _open_browser_when_ready(f"http://localhost:{args.port}", args.port)
     print(f"Dashboard: http://localhost:{args.port}")
     uvicorn.run("app.main:app", port=args.port)
 

@@ -1,14 +1,13 @@
 import threading
-from io import BytesIO
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from app.config import get_settings
 from app.database import get_db
-from app.services.drive import DriveConfigError, DriveError, download_drive_file
-from app.services.importer import ExcelParseError, import_accounts, parse_workbook
+from app.services.drive import DriveConfigError, DriveError
+from app.services.importer import ExcelParseError
+from app.services.sync import SyncNotConfigured, run_drive_sync
 
 router = APIRouter()
 
@@ -29,38 +28,23 @@ def sync_from_drive(db: Session = Depends(get_db)):
     Download the workbook from Google Drive and replace all accounts and
     values with its contents.
     """
-    settings = get_settings()
-    if not settings.drive_file_id:
-        raise HTTPException(
-            status_code=503,
-            detail="Drive sync is not configured: set DRIVE_FILE_ID in .env",
-        )
-
     if not _sync_lock.acquire(blocking=False):
         raise HTTPException(status_code=409, detail="A sync is already in progress")
 
     try:
-        try:
-            drive_file = download_drive_file(
-                settings.drive_file_id, settings.service_account_file
-            )
-        except DriveConfigError as e:
-            raise HTTPException(status_code=503, detail=str(e))
-        except DriveError as e:
-            raise HTTPException(status_code=502, detail=str(e))
-
-        try:
-            parsed = parse_workbook(BytesIO(drive_file.content))
-        except ExcelParseError as e:
-            raise HTTPException(status_code=422, detail=str(e))
-
-        summary = import_accounts(db, parsed)
-
-        return SyncResult(
-            accounts_loaded=summary.accounts_loaded,
-            values_loaded=summary.values_loaded,
-            file_name=drive_file.name,
-            drive_modified_time=drive_file.modified_time,
-        )
+        outcome = run_drive_sync(db)
+    except (SyncNotConfigured, DriveConfigError) as e:
+        raise HTTPException(status_code=503, detail=str(e))
+    except DriveError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+    except ExcelParseError as e:
+        raise HTTPException(status_code=422, detail=str(e))
     finally:
         _sync_lock.release()
+
+    return SyncResult(
+        accounts_loaded=outcome.accounts_loaded,
+        values_loaded=outcome.values_loaded,
+        file_name=outcome.file_name,
+        drive_modified_time=outcome.drive_modified_time,
+    )
