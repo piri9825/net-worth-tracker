@@ -81,7 +81,13 @@ function NetWorth() {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    accountsApi.getAll().then(setAccounts).catch(console.error);
+    accountsApi
+      .getAll()
+      .then(list => {
+        setAccounts(list);
+        setSelectedAccounts(list.map(a => a.name));
+      })
+      .catch(console.error);
   }, []);
 
   useEffect(() => {

@@ -53,16 +53,16 @@ def sync_on_startup() -> None:
 
     db = SessionLocal()
     try:
+        print("Syncing from Google Drive...", flush=True)
         outcome = run_drive_sync(db)
         print(
             f"Startup sync: {outcome.accounts_loaded} accounts, "
-            f"{outcome.values_loaded} values from '{outcome.file_name}'"
+            f"{outcome.values_loaded} values from '{outcome.file_name}'",
+            flush=True,
         )
-    except SyncNotConfigured as e:
-        print(f"Skipping startup sync - {e}")
-    except DriveConfigError as e:
-        print(f"Skipping startup sync - {e}")
+    except (SyncNotConfigured, DriveConfigError) as e:
+        print(f"Skipping startup sync - {e}", flush=True)
     except Exception as e:
-        print(f"Startup sync failed ({e}) - serving existing data")
+        print(f"Startup sync failed ({e}) - serving existing data", flush=True)
     finally:
         db.close()
