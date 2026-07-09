@@ -38,6 +38,57 @@ export function totalsByDate(values: Value[]): { date: string; total: number }[]
     .map(date => ({ date, total: byDate[date] }));
 }
 
+export interface AccountChange {
+  name: string;
+  previous: number | null;
+  current: number | null;
+  change: number;
+  pct: number | null;
+}
+
+export interface MonthlyChanges {
+  previousLabel: string;
+  currentLabel: string;
+  changes: AccountChange[];
+  totalChange: number;
+}
+
+export function computeMonthlyChanges(values: Value[]): MonthlyChanges | null {
+  const dates = [...new Set(values.map(v => v.date.split('T')[0]))].sort();
+  if (dates.length < 2) return null;
+  const [previousDate, currentDate] = dates.slice(-2);
+
+  const amounts = new Map<string, { previous: number | null; current: number | null }>();
+  values.forEach(v => {
+    const d = v.date.split('T')[0];
+    if (d !== previousDate && d !== currentDate) return;
+    const entry = amounts.get(v.account_name) ?? { previous: null, current: null };
+    if (d === previousDate) entry.previous = (entry.previous ?? 0) + v.amount;
+    else entry.current = (entry.current ?? 0) + v.amount;
+    amounts.set(v.account_name, entry);
+  });
+
+  const changes: AccountChange[] = [...amounts.entries()]
+    .map(([name, { previous, current }]) => {
+      const change = (current ?? 0) - (previous ?? 0);
+      return {
+        name,
+        previous,
+        current,
+        change,
+        pct: previous != null && previous !== 0 ? (change / Math.abs(previous)) * 100 : null,
+      };
+    })
+    .sort((a, b) => Math.abs(b.change) - Math.abs(a.change));
+
+  return {
+    previousLabel: monthLabel(previousDate),
+    currentLabel: monthLabel(currentDate),
+    changes,
+    totalChange: changes.reduce((sum, c) => sum + c.change, 0),
+  };
+}
+
 export function computeSummaryStats(accounts: Account[], values: Value[]): SummaryStats | null {
   const totals = totalsByDate(values);
   if (totals.length === 0) return null;

@@ -24,8 +24,9 @@ import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { accountsApi, valuesApi } from '../services/api';
 import { useTheme } from '../contexts/theme';
-import { computeSummaryStats } from '../lib/stats';
+import { computeSummaryStats, computeMonthlyChanges } from '../lib/stats';
 import SummaryStats from '../components/SummaryStats';
+import MonthlyChanges from '../components/MonthlyChanges';
 import type { Account, Value, ViewMode, Term, AccountType } from '../types/api';
 
 ChartJS.register(
@@ -98,6 +99,7 @@ function NetWorth() {
     () => computeSummaryStats(accounts, allValues),
     [accounts, allValues]
   );
+  const monthlyChanges = useMemo(() => computeMonthlyChanges(allValues), [allValues]);
 
   useEffect(() => {
     const handleScroll = () => setPopoverOpen(false);
@@ -400,6 +402,9 @@ function NetWorth() {
           )}
         </CardContent>
       </Card>
+
+      {/* Month-over-month changes (all accounts, independent of the filters) */}
+      {monthlyChanges && <MonthlyChanges changes={monthlyChanges} />}
     </div>
   );
 }
