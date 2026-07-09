@@ -24,6 +24,8 @@ import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { accountsApi, valuesApi } from '../services/api';
 import { useTheme } from '../contexts/theme';
+import { computeSummaryStats } from '../lib/stats';
+import SummaryStats from '../components/SummaryStats';
 import type { Account, Value, ViewMode, Term, AccountType } from '../types/api';
 
 ChartJS.register(
@@ -72,6 +74,7 @@ function NetWorth() {
   const isDark = theme === 'dark';
 
   const [accounts, setAccounts] = useState<Account[]>([]);
+  const [allValues, setAllValues] = useState<Value[]>([]);
   const [selectedTerm, setSelectedTerm] = useState<Term[]>([]);
   const [selectedType, setSelectedType] = useState<AccountType[]>([]);
   const [selectedAccounts, setSelectedAccounts] = useState<string[]>([]);
@@ -88,7 +91,13 @@ function NetWorth() {
         setSelectedAccounts(list.map(a => a.name));
       })
       .catch(console.error);
+    valuesApi.getAll().then(setAllValues).catch(console.error);
   }, []);
+
+  const summaryStats = useMemo(
+    () => computeSummaryStats(accounts, allValues),
+    [accounts, allValues]
+  );
 
   useEffect(() => {
     const handleScroll = () => setPopoverOpen(false);
@@ -231,6 +240,9 @@ function NetWorth() {
         <h1 className="text-2xl font-bold tracking-tight">Net Worth</h1>
         <p className="text-muted-foreground text-sm mt-0.5">Track and visualize your account values over time.</p>
       </div>
+
+      {/* Summary tiles (all accounts, independent of the filters below) */}
+      {summaryStats && <SummaryStats stats={summaryStats} />}
 
       {/* Compact filter bar */}
       <Card>

@@ -59,4 +59,5 @@ export const syncApi = {
 export const valuesApi = {
   getByAccount: (accountName: string, params?: { start_date?: string; end_date?: string }) =>
     apiFetch<Value[]>(`/values/account/${encodeURIComponent(accountName)}`, params as Record<string, string>),
+  getAll: () => apiFetch<Value[]>('/values/', { limit: '100000' }),
 };
