@@ -35,6 +35,8 @@ def init_db():
     Call this function during application startup.
     """
 
+    import app.models  # noqa: F401  (register all models with Base)
+
     print("Creating database tables...")
     Base.metadata.create_all(bind=engine)
     print("Database tables created")

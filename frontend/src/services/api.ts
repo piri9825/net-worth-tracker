@@ -38,6 +38,7 @@ export interface SyncResult {
   values_loaded: number;
   file_name: string;
   drive_modified_time: string;
+  skipped: boolean;
 }
 
 export const accountsApi = {

@@ -14,6 +14,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from app.database import SessionLocal, init_db  # noqa: E402
+from app.services.backup import snapshot_db  # noqa: E402
 from app.services.importer import (  # noqa: E402
     ExcelParseError,
     import_accounts,
@@ -42,6 +43,8 @@ def main():
         parsed = parse_workbook(args.xlsx_file)
     except ExcelParseError as e:
         sys.exit(f"Parse error: {e}")
+
+    snapshot_db()
 
     db = SessionLocal()
     try:

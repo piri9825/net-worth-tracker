@@ -206,3 +206,6 @@ Net Worth Tracker.xlsx
 
 # Google Drive service account credentials
 secrets/
+
+# Database snapshots taken before each sync
+backups/

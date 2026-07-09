@@ -20,19 +20,21 @@ class SyncResult(BaseModel):
     values_loaded: int
     file_name: str
     drive_modified_time: str
+    skipped: bool
 
 
 @router.post("/", response_model=SyncResult)
-def sync_from_drive(db: Session = Depends(get_db)):
+def sync_from_drive(force: bool = False, db: Session = Depends(get_db)):
     """
     Download the workbook from Google Drive and replace all accounts and
-    values with its contents.
+    values with its contents. Skipped when the file hasn't changed since
+    the last sync, unless force=true.
     """
     if not _sync_lock.acquire(blocking=False):
         raise HTTPException(status_code=409, detail="A sync is already in progress")
 
     try:
-        outcome = run_drive_sync(db)
+        outcome = run_drive_sync(db, force=force)
     except (SyncNotConfigured, DriveConfigError) as e:
         raise HTTPException(status_code=503, detail=str(e))
     except DriveError as e:
@@ -47,4 +49,5 @@ def sync_from_drive(db: Session = Depends(get_db)):
         values_loaded=outcome.values_loaded,
         file_name=outcome.file_name,
         drive_modified_time=outcome.drive_modified_time,
+        skipped=outcome.skipped,
     )

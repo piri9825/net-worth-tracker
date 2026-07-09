@@ -1,5 +1,5 @@
 """
-Download the tracker workbook from Google Drive using a service account.
+Google Drive access via a service account.
 
 The service account's JSON key file must exist locally and the Drive file
 must be shared (Viewer is enough) with the service account's email address.
@@ -29,41 +29,35 @@ class DriveError(Exception):
 
 
 @dataclass
-class DriveFile:
+class DriveMetadata:
     name: str
+    mime_type: str
     modified_time: str
-    content: bytes
 
 
-def _load_credentials(service_account_file: Path) -> service_account.Credentials:
-    if not service_account_file.exists():
-        raise DriveConfigError(
-            f"Service account key file not found: {service_account_file}"
-        )
-    try:
-        return service_account.Credentials.from_service_account_file(
-            str(service_account_file), scopes=SCOPES
-        )
-    except (ValueError, json.JSONDecodeError) as e:
-        raise DriveConfigError(
-            f"Invalid service account key file {service_account_file}: {e}"
-        ) from e
+class DriveClient:
+    """Authenticates once, then fetches metadata and content separately."""
 
+    def __init__(self, service_account_file: Path):
+        if not service_account_file.exists():
+            raise DriveConfigError(
+                f"Service account key file not found: {service_account_file}"
+            )
+        try:
+            self._credentials = service_account.Credentials.from_service_account_file(
+                str(service_account_file), scopes=SCOPES
+            )
+        except (ValueError, json.JSONDecodeError) as e:
+            raise DriveConfigError(
+                f"Invalid service account key file {service_account_file}: {e}"
+            ) from e
+        try:
+            self._credentials.refresh(Request())
+        except Exception as e:
+            raise DriveError(f"Could not authenticate with Google: {e}") from e
 
-def download_drive_file(file_id: str, service_account_file: Path) -> DriveFile:
-    """
-    Fetch the file's metadata and content from Google Drive.
-    Native Google Sheets are exported as xlsx; regular files are downloaded as-is.
-    """
-    credentials = _load_credentials(service_account_file)
-    try:
-        credentials.refresh(Request())
-    except Exception as e:
-        raise DriveError(f"Could not authenticate with Google: {e}") from e
-
-    headers = {"Authorization": f"Bearer {credentials.token}"}
-
-    def _get(url: str, **kwargs) -> requests.Response:
+    def _get(self, url: str, file_id: str, **kwargs) -> requests.Response:
+        headers = {"Authorization": f"Bearer {self._credentials.token}"}
         try:
             response = requests.get(
                 url, headers=headers, timeout=TIMEOUT_SECONDS, **kwargs
@@ -73,7 +67,7 @@ def download_drive_file(file_id: str, service_account_file: Path) -> DriveFile:
         if response.status_code in (403, 404):
             raise DriveError(
                 f"Drive file '{file_id}' not found or not shared with the "
-                f"service account ({credentials.service_account_email})"
+                f"service account ({self._credentials.service_account_email})"
             )
         if response.status_code != 200:
             raise DriveError(
@@ -81,20 +75,26 @@ def download_drive_file(file_id: str, service_account_file: Path) -> DriveFile:
             )
         return response
 
-    metadata = _get(
-        f"{DRIVE_FILES_URL}/{file_id}",
-        params={"fields": "name,mimeType,modifiedTime"},
-    ).json()
+    def get_metadata(self, file_id: str) -> DriveMetadata:
+        data = self._get(
+            f"{DRIVE_FILES_URL}/{file_id}",
+            file_id,
+            params={"fields": "name,mimeType,modifiedTime"},
+        ).json()
+        return DriveMetadata(
+            name=data.get("name", file_id),
+            mime_type=data.get("mimeType", ""),
+            modified_time=data.get("modifiedTime", ""),
+        )
 
-    if metadata.get("mimeType") == GOOGLE_SHEET_MIME:
-        content = _get(
-            f"{DRIVE_FILES_URL}/{file_id}/export", params={"mimeType": XLSX_MIME}
+    def download(self, file_id: str, mime_type: str) -> bytes:
+        """Download file content; native Google Sheets are exported as xlsx."""
+        if mime_type == GOOGLE_SHEET_MIME:
+            return self._get(
+                f"{DRIVE_FILES_URL}/{file_id}/export",
+                file_id,
+                params={"mimeType": XLSX_MIME},
+            ).content
+        return self._get(
+            f"{DRIVE_FILES_URL}/{file_id}", file_id, params={"alt": "media"}
         ).content
-    else:
-        content = _get(f"{DRIVE_FILES_URL}/{file_id}", params={"alt": "media"}).content
-
-    return DriveFile(
-        name=metadata.get("name", file_id),
-        modified_time=metadata.get("modifiedTime", ""),
-        content=content,
-    )

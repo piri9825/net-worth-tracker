@@ -20,7 +20,9 @@ function SyncButton({ onSynced }: { onSynced: () => void }) {
     try {
       const result = await syncApi.run();
       setMessage({
-        text: `Synced ${result.accounts_loaded} accounts, ${result.values_loaded} values`,
+        text: result.skipped
+          ? 'Already up to date'
+          : `Synced ${result.accounts_loaded} accounts, ${result.values_loaded} values`,
         error: false,
       });
       clearTimer.current = setTimeout(() => setMessage(null), 4000);
