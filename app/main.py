@@ -1,9 +1,15 @@
 from contextlib import asynccontextmanager
+from pathlib import Path
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.api import api_router
 from app.database import init_db, SessionLocal
+
+FRONTEND_DIST = Path(__file__).resolve().parent.parent / "frontend" / "dist"
 
 
 @asynccontextmanager
@@ -42,21 +48,28 @@ app.add_middleware(
 )
 
 
-# Root endpoint
-@app.get("/")
-async def root():
-    return {
-        "message": "Welcome to the Net Worth Tracker API",
-        "docs": "/api/docs or /api/redoc",
-        "openapi_schema": "/api/openapi.json",
-    }
+class SPAStaticFiles(StaticFiles):
+    """Serve the built frontend, falling back to index.html for client routes."""
+
+    async def get_response(self, path: str, scope):
+        try:
+            return await super().get_response(path, scope)
+        except StarletteHTTPException as exc:
+            if exc.status_code == 404:
+                return await super().get_response("index.html", scope)
+            raise
 
 
-# Import and include routers here
-# from app.routers import users, accounts, values
-# app.include_router(users.router, prefix="/api/users", tags=["users"])
-# app.include_router(accounts.router, prefix="/api/accounts", tags=["accounts"])
-# app.include_router(values.router, prefix="/api/values", tags=["values"])
+if FRONTEND_DIST.is_dir():
+    app.mount("/", SPAStaticFiles(directory=FRONTEND_DIST, html=True), name="frontend")
+else:
+
+    @app.get("/")
+    async def root():
+        return {
+            "message": "Net Worth Tracker API (frontend not built - run: uv run tracker)",
+            "docs": "/api/docs or /api/redoc",
+        }
 
 if __name__ == "__main__":
     import uvicorn

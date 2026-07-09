@@ -1,9 +1,10 @@
 import type { Account, Value } from '../types/api';
 
-const API_BASE_URL = 'http://localhost:8000/api';
+// Same-origin in production (served by FastAPI); proxied to the backend by Vite in dev
+const API_BASE_URL = '/api';
 
 async function apiFetch<T>(path: string, params?: Record<string, string>): Promise<T> {
-  const url = new URL(`${API_BASE_URL}${path}`);
+  const url = new URL(`${API_BASE_URL}${path}`, window.location.origin);
   if (params) {
     Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
   }

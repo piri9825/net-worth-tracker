@@ -83,6 +83,25 @@ The script stops reading when it encounters a row with an empty Description fiel
 
 ## Running the Application
 
+```bash
+uv run tracker
+```
+
+That's it — one command builds the frontend if needed, starts the server, and opens the dashboard at http://localhost:8000 (API docs at http://localhost:8000/api/docs). Load fresh data by clicking the sync icon in the header.
+
+Options:
+
+```bash
+uv run tracker --port 9000     # different port
+uv run tracker --no-browser    # don't open the browser
+uv run tracker --dev           # for frontend development: also starts the Vite
+                               # dev server (http://localhost:5173) with hot
+                               # reload, backend restarts on code changes
+```
+
+<details>
+<summary>Running the servers manually instead</summary>
+
 ### 1. Start the Backend Server
 
 ```bash
@@ -91,7 +110,7 @@ uv run uvicorn app.main:app --reload --port 8000
 ```
 
 The API will be available at: http://localhost:8000
-- API docs: http://localhost:8000/docs
+- API docs: http://localhost:8000/api/docs
 
 ### 2. Load Data
 
@@ -120,6 +139,8 @@ npm run dev
 ```
 
 The frontend will be available at: http://localhost:5173
+
+</details>
 
 ## Google Drive Sync Setup
 
